@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Google Maps Business Extractor</title>
+<!-- Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg-base: #080c14;
+    --bg-surface: #0e1526;
+    --bg-surface-elevated: #141e33;
+    --bg-input: #0a0f1d;
+    --border: rgba(148, 163, 184, 0.15);
+    --border-subtle: rgba(255, 255, 255, 0.06);
+    --border-focus: #3b82f6;
+    --text-primary: #f8fafc;
+    --text-secondary: #cbd5e1;
+    --text-muted: #94a3b8;
+    --text-faint: #64748b;
+    --accent: #3b82f6;
+    --accent-glow: rgba(59, 130, 246, 0.3);
+    --success: #10b981;
+    --success-glow: rgba(16, 185, 129, 0.25);
+    --warn: #f59e0b;
+    --error: #ef4444;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --shadow-card: 0 12px 30px -10px rgba(0, 0, 0, 0.65), 0 4px 12px -2px rgba(0, 0, 0, 0.4);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-base);
+    background-image: 
+      radial-gradient(circle at 12% 15%, rgba(59, 130, 246, 0.09) 0%, transparent 45%),
+      radial-gradient(circle at 88% 25%, rgba(99, 102, 241, 0.08) 0%, transparent 45%),
+      radial-gradient(circle at 50% 85%, rgba(16, 185, 129, 0.04) 0%, transparent 50%);
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding: 28px 24px 60px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1320px; margin: 0 auto; }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 28px;
+    padding-bottom: 22px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .logo-box {
+    width: 50px;
+    height: 50px;
+    border-radius: var(--radius-md);
+    background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    color: #ffffff;
+    flex-shrink: 0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  header h1 {
+    font-size: 1.65rem;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    background: linear-gradient(180deg, #ffffff 40%, #cbd5e1 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  header p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-top: 2px;
+    font-weight: 500;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 30px;
+    color: #34d399;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .status-chip .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 8px #10b981;
+    animation: livePulse 2s infinite;
+  }
+  @keyframes livePulse {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  }
+
+  .docs-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 30px;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s ease;
+  }
+  .docs-pill:hover {
+    color: #60a5fa;
+    border-color: var(--accent);
+    background: rgba(59, 130, 246, 0.12);
+    transform: translateY(-1px);
+  }
+
+  /* Grid Layout */
+  .grid {
+    display: grid;
+    grid-template-columns: 400px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+  .left-col { display: flex; flex-direction: column; gap: 24px; }
+  @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+
+  /* Cards */
+  .card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    box-shadow: var(--shadow-card);
+    backdrop-filter: blur(16px);
+    transition: border-color 0.25s, box-shadow 0.25s;
+  }
+  .card:hover {
+    border-color: rgba(148, 163, 184, 0.28);
+    box-shadow: 0 16px 36px -10px rgba(0, 0, 0, 0.75);
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .card-header-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-sm);
+    background: rgba(59, 130, 246, 0.14);
+    color: #60a5fa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+    border: 1px solid rgba(59, 130, 246, 0.25);
+  }
+  .card-header-icon.purple {
+    background: rgba(124, 58, 237, 0.14);
+    color: #a78bfa;
+    border-color: rgba(124, 58, 237, 0.25);
+  }
+  .card-header-icon.emerald {
+    background: rgba(16, 185, 129, 0.14);
+    color: #34d399;
+    border-color: rgba(16, 185, 129, 0.25);
+  }
+  .card-header h2 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.015em;
+  }
+
+  /* Form Elements */
+  label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 14px 0 6px;
+  }
+  label:first-of-type { margin-top: 0; }
+
+  input, select, textarea {
+    width: 100%;
+    padding: 11px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.92rem;
+    outline: none;
+    transition: all 0.2s ease;
+  }
+  input::placeholder, textarea::placeholder {
+    color: var(--text-faint);
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--border-focus);
+    background: #0f172a;
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+
+  select {
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+    appearance: none;
+  }
+  select option {
+    background: #0f172a;
+    color: #f8fafc;
+  }
+
+  textarea { resize: vertical; line-height: 1.45; }
+
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .hint {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    margin-top: 5px;
+    line-height: 1.4;
+  }
+
+  .checkbox-tile {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 11px 13px;
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .checkbox-tile:hover {
+    border-color: rgba(59, 130, 246, 0.35);
+    background: rgba(15, 23, 42, 0.9);
+  }
+  .checkbox-tile input[type="checkbox"] {
+    width: 17px;
+    height: 17px;
+    margin-top: 2px;
+    cursor: pointer;
+    accent-color: var(--accent);
+  }
+  .checkbox-tile span {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+  }
+
+  /* Buttons */
+  button.primary {
+    width: 100%;
+    margin-top: 20px;
+    padding: 13px 18px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 0.96rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  button.primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 22px rgba(37, 99, 235, 0.5);
+    background: linear-gradient(135deg, #1d4ed8 0%, #4338ca 100%);
+  }
+  button.primary:active:not(:disabled) {
+    transform: translateY(0);
+  }
+  button.primary:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+  }
+
+  button.ghost {
+    padding: 11px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.88rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+  }
+  button.ghost:hover {
+    border-color: var(--accent);
+    background: rgba(59, 130, 246, 0.1);
+    color: #60a5fa;
+  }
+
+  button.download {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 9px;
+    cursor: pointer;
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 0.88rem;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  button.download:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+    background: linear-gradient(135deg, #047857 0%, #059669 100%);
+  }
+  button.download:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  /* Status and Pills */
+  .status {
+    margin-top: 16px;
+    font-size: 0.86rem;
+    min-height: 24px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .status .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 700;
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .pill.queued, .pill.running {
+    background: rgba(245, 158, 11, 0.16);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+  }
+  .pill.done {
+    background: rgba(16, 185, 129, 0.16);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+  }
+  .pill.failed {
+    background: rgba(239, 68, 68, 0.16);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 15px;
+    height: 15px;
+    border: 2px solid rgba(148, 163, 184, 0.25);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-box {
+    color: #f87171;
+    font-size: 0.84rem;
+    margin-top: 12px;
+    padding: 11px 14px;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    display: none;
+    line-height: 1.4;
+  }
+  .error-box:not(:empty) { display: block; }
+
+  /* KPI Summary Row */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .kpi-card {
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 13px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  }
+  .kpi-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  .kpi-value {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    font-family: "JetBrains Mono", monospace;
+  }
+
+  .toolbar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .toolbar .count {
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    font-weight: 600;
+    margin-right: auto;
+  }
+  .toolbar input {
+    width: 250px;
+    padding: 9px 12px;
+  }
+
+  /* Table */
+  .table-wrap {
+    overflow: auto;
+    max-height: 600px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #090e1a;
+  }
+  /* Custom Dark Scrollbars */
+  .table-wrap::-webkit-scrollbar,
+  textarea::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .table-wrap::-webkit-scrollbar-track,
+  textarea::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.5);
+  }
+  .table-wrap::-webkit-scrollbar-thumb,
+  textarea::-webkit-scrollbar-thumb {
+    background: #1e293b;
+    border-radius: 4px;
+  }
+  .table-wrap::-webkit-scrollbar-thumb:hover,
+  textarea::-webkit-scrollbar-thumb:hover {
+    background: #3b82f6;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.84rem;
+    min-width: 980px;
+  }
+  thead th {
+    position: sticky;
+    top: 0;
+    background: #10182b;
+    color: var(--text-secondary);
+    font-weight: 700;
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    text-align: left;
+    padding: 12px 14px;
+    white-space: nowrap;
+    z-index: 2;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  }
+  tbody td {
+    padding: 11px 14px;
+    border-top: 1px solid rgba(148, 163, 184, 0.08);
+    vertical-align: middle;
+    color: var(--text-secondary);
+  }
+  tbody tr {
+    transition: background 0.15s ease;
+  }
+  tbody tr:hover {
+    background: rgba(59, 130, 246, 0.08);
+  }
+  tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.015);
+  }
+  tbody tr:nth-child(even):hover {
+    background: rgba(59, 130, 246, 0.08);
+  }
+
+  .badge-tag {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    background: var(--bg-surface-elevated);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+  .rating-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px 8px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.8rem;
+  }
+  .rating-gold {
+    background: rgba(245, 158, 11, 0.18);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+  }
+  .rating-green {
+    background: rgba(16, 185, 129, 0.18);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+  }
+  .rating-blue {
+    background: rgba(59, 130, 246, 0.18);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.35);
+  }
+  .rating-muted {
+    background: rgba(148, 163, 184, 0.12);
+    color: var(--text-muted);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+  }
+
+  .phone-link {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.8rem;
+    transition: color 0.15s;
+  }
+  .phone-link:hover { color: #60a5fa; text-decoration: underline; }
+
+  a.action-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #60a5fa;
+    text-decoration: none;
+    font-weight: 600;
+    padding: 4px 9px;
+    border-radius: 6px;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.22);
+    transition: all 0.15s ease;
+  }
+  a.action-link:hover {
+    background: rgba(59, 130, 246, 0.25);
+    border-color: rgba(59, 130, 246, 0.45);
+    color: #93c5fd;
+    transform: translateY(-1px);
+  }
+
+  .empty {
+    color: var(--text-muted);
+    text-align: center;
+    padding: 60px 20px;
+    font-size: 0.95rem;
+  }
+  .empty-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+    opacity: 0.7;
+  }
+
+  /* Footer */
+  footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 40px;
+    padding-top: 22px;
+    border-top: 1px solid var(--border);
+    color: var(--text-faint);
+    font-size: 0.82rem;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  footer a { color: var(--text-muted); text-decoration: none; transition: color 0.15s; }
+  footer a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="header-left">
+      <div class="logo-box">&#9673;</div>
+      <div>
+        <h1>Google Maps Business Extractor</h1>
+        <p>Live listings extraction, multi-locality whole city sweeps, and CSV export.</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <div class="status-chip"><span class="dot"></span>API Online</div>
+      <a href="/docs" target="_blank" class="docs-pill">Swagger Docs &rarr;</a>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="left-col">
+      <!-- Targeted Search Card -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-header-icon">&#9906;</div>
+          <h2>Targeted Search</h2>
+        </div>
+
+        <label for="apiKey">API Key</label>
+        <input id="apiKey" type="password" placeholder="Enter X-API-Key..." autocomplete="off" />
+
+        <label for="query">Business category / query</label>
+        <input id="query" type="text" value="dental clinic" placeholder="e.g. dental clinic" />
+
+        <label for="location">Location</label>
+        <input id="location" type="text" value="Dharampeth, Nagpur" placeholder="e.g. Connaught Place, New Delhi" />
+
+        <div class="row">
+          <div>
+            <label for="radius">Radius (km) &mdash; optional</label>
+            <input id="radius" type="number" min="0.1" max="100" step="0.1" placeholder="Blank = whole area" />
+            <div class="hint">Saved in CSV for reference. Area comes from Location text.</div>
+          </div>
+          <div>
+            <label for="minRating">Min rating</label>
+            <select id="minRating">
+              <option value="">Any</option>
+              <option value="3">3.0+</option>
+              <option value="3.5">3.5+</option>
+              <option value="4" selected>4.0+</option>
+              <option value="4.5">4.5+</option>
+            </select>
+          </div>
+        </div>
+
+        <label for="maxResults">Max results</label>
+        <input id="maxResults" type="number" min="1" max="10000" placeholder="Blank = all results" />
+        <div class="hint">Leave blank to collect every listing Google Maps returns.</div>
+
+        <label class="checkbox-tile">
+          <input id="enrich" type="checkbox" checked />
+          <span><strong>Full details</strong> &mdash; phone, website, hours (uncheck for fast list-only)</span>
+        </label>
+
+        <label for="extraLocations">Extra areas (one per line) &mdash; multi-area sweep</label>
+        <textarea id="extraLocations" rows="3" placeholder="Sadar, Nagpur&#10;Bajaj Nagar, Nagpur&#10;Dharampeth, Nagpur"></textarea>
+        <div class="hint">Sweeps Location + each area, then dedupes. Bypasses Google's ~120 per-query ceiling.</div>
+
+        <label for="extraQueries">Extra queries (one per line) &mdash; variants per area</label>
+        <textarea id="extraQueries" rows="3" placeholder="family restaurant&#10;veg restaurant&#10;dhaba"></textarea>
+        <div class="hint">Generates queries &times; areas grid feeds for deep coverage.</div>
+
+        <label class="checkbox-tile">
+          <input id="autoAreas" type="checkbox" checked />
+          <span><strong>Auto-split city</strong> &mdash; auto-discover localities via mapsofindia.com &amp; OSM</span>
+        </label>
+
+        <button class="primary" id="searchBtn">
+          <span>Search Google Maps</span>
+        </button>
+        <div class="status" id="status"></div>
+        <div class="error-box" id="error"></div>
+      </div>
+
+      <!-- Whole-City Sweep Card -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-header-icon purple">&#9873;</div>
+          <h2>Whole-City Sweep</h2>
+        </div>
+
+        <label for="cityName">Target City</label>
+        <input id="cityName" type="text" placeholder="e.g. Nagpur" />
+
+        <label for="cityQuery">Category (searched in every locality)</label>
+        <input id="cityQuery" type="text" value="restaurant" placeholder="e.g. restaurant" />
+
+        <div class="row">
+          <div>
+            <label for="cityMax">Max results &mdash; optional</label>
+            <input id="cityMax" type="number" min="1" max="10000" placeholder="Blank = all" />
+          </div>
+          <div>
+            <label for="cityRating">Min rating</label>
+            <select id="cityRating">
+              <option value="">Any</option>
+              <option value="3">3.0+</option>
+              <option value="3.5">3.5+</option>
+              <option value="4">4.0+</option>
+              <option value="4.5">4.5+</option>
+            </select>
+          </div>
+        </div>
+
+        <label class="checkbox-tile">
+          <input id="cityEnrich" type="checkbox" checked />
+          <span><strong>Full details</strong> &mdash; phone, website, hours</span>
+        </label>
+
+        <button class="ghost" id="localitiesBtn" style="margin-top:16px;width:100%">Preview Localities</button>
+        <div class="hint" id="localitiesInfo" style="margin-top:6px;">Discovers localities via mapsofindia.com (OSM fallback).</div>
+
+        <button class="primary" id="citySweepBtn" style="margin-top:14px; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);">
+          <span>Sweep Entire City</span>
+        </button>
+        <div class="status" id="cityStatus"></div>
+      </div>
+    </div>
+
+    <!-- Results Card -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-icon emerald">&#9776;</div>
+        <h2>Extracted Results</h2>
+      </div>
+
+      <!-- KPI Summary Row -->
+      <div class="kpi-row" id="kpiRow" style="display:none;">
+        <div class="kpi-card">
+          <div class="kpi-label">Total Listings</div>
+          <div class="kpi-value" id="kpiTotal">0</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Avg Rating</div>
+          <div class="kpi-value" id="kpiAvgRating">&mdash;</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Top Rated (4.5★+)</div>
+          <div class="kpi-value" id="kpiTopRated">0</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">With Phone</div>
+          <div class="kpi-value" id="kpiWithPhone">0</div>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <span class="count" id="count">No search yet.</span>
+        <input id="filter" type="text" placeholder="Filter results in real-time..." disabled />
+        <button class="download" id="downloadBtn" disabled>
+          <span>Download CSV</span>
+        </button>
+      </div>
+
+      <div class="table-wrap">
+        <div class="empty" id="empty">
+          <div class="empty-icon">&#128269;</div>
+          <div>Run a targeted search or whole-city sweep to extract listings.</div>
+        </div>
+        <table id="table" style="display:none">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Business</th>
+              <th>Category</th>
+              <th>Address</th>
+              <th>Search Locality</th>
+              <th>Phone</th>
+              <th>Rating</th>
+              <th>Reviews</th>
+              <th>Website</th>
+              <th>Maps</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div>Google Maps Business Data Extractor API &middot; High Precision Scraping</div>
+    <div>API Documentation: <a href="/docs" target="_blank">/docs</a> &middot; OpenAPI: <a href="/openapi.json" target="_blank">/openapi.json</a></div>
+  </footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const apiKeyEl = $("apiKey"), queryEl = $("query"), locEl = $("location"),
+      radiusEl = $("radius"), ratingEl = $("minRating"), maxEl = $("maxResults"),
+      enrichEl = $("enrich"), extraLocEl = $("extraLocations"), extraQEl = $("extraQueries"), autoAreasEl = $("autoAreas"), searchBtn = $("searchBtn"), statusEl = $("status"), errorEl = $("error"),
+      countEl = $("count"), filterEl = $("filter"), dlBtn = $("downloadBtn"),
+      tableEl = $("table"), tbodyEl = $("tbody"), emptyEl = $("empty"),
+      cityEl = $("cityName"), cityQueryEl = $("cityQuery"), cityMaxEl = $("cityMax"),
+      cityRatingEl = $("cityRating"), cityEnrichEl = $("cityEnrich"),
+      localitiesBtn = $("localitiesBtn"), localitiesInfoEl = $("localitiesInfo"),
+      citySweepBtn = $("citySweepBtn"), cityStatusEl = $("cityStatus"),
+      kpiRowEl = $("kpiRow"), kpiTotalEl = $("kpiTotal"), kpiAvgRatingEl = $("kpiAvgRating"),
+      kpiTopRatedEl = $("kpiTopRated"), kpiWithPhoneEl = $("kpiWithPhone");
+
+apiKeyEl.value = localStorage.getItem("gmaps_api_key") || "";
+apiKeyEl.addEventListener("change", () => localStorage.setItem("gmaps_api_key", apiKeyEl.value.trim()));
+
+let pollTimer = null, currentJob = null, allRecords = [], activeMode = "search";
+
+function headers() { return { "Content-Type": "application/json", "X-API-Key": apiKeyEl.value.trim() }; }
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function link(href, text) {
+  if (!href) return `<span style="color:var(--text-faint)">&mdash;</span>`;
+  const t = esc(text || href);
+  const display = t.length > 28 ? t.slice(0, 28) + "\u2026" : t;
+  return `<a href="${esc(href)}" class="action-link" target="_blank" rel="noopener">${display} &nearr;</a>`;
+}
+
+function updateKPIs(records) {
+  if (!records || !records.length) {
+    if (kpiRowEl) kpiRowEl.style.display = "none";
+    return;
+  }
+  if (kpiRowEl) kpiRowEl.style.display = "grid";
+  if (kpiTotalEl) kpiTotalEl.textContent = records.length.toLocaleString();
+
+  let totalR = 0, ratedCount = 0, topRated = 0, withPhone = 0;
+  records.forEach((r) => {
+    const val = parseFloat(r.rating);
+    if (!isNaN(val) && val > 0) {
+      totalR += val;
+      ratedCount++;
+      if (val >= 4.5) topRated++;
+    }
+    if (r.phone_number && String(r.phone_number).trim()) withPhone++;
+  });
+
+  if (kpiAvgRatingEl) {
+    kpiAvgRatingEl.textContent = ratedCount > 0 ? (totalR / ratedCount).toFixed(1) + " ★" : "—";
+  }
+  if (kpiTopRatedEl) kpiTopRatedEl.textContent = topRated.toLocaleString();
+  if (kpiWithPhoneEl) kpiWithPhoneEl.textContent = withPhone.toLocaleString();
+}
+
+searchBtn.addEventListener("click", async () => {
+  errorEl.textContent = "";
+  if (!apiKeyEl.value.trim()) { errorEl.textContent = "Enter your API key first."; return; }
+  if (!queryEl.value.trim() || !locEl.value.trim()) { errorEl.textContent = "Query and location are required."; return; }
+  clearInterval(pollTimer);
+  searchBtn.disabled = true; dlBtn.disabled = true; filterEl.disabled = true;
+  allRecords = []; render([]);
+  countEl.textContent = "Starting search...";
+
+  const body = { query: queryEl.value.trim(), location: locEl.value.trim() };
+  const r = parseFloat(radiusEl.value); body.radius_km = isNaN(r) ? null : r;
+  const mr = parseInt(maxEl.value, 10); if (!isNaN(mr) && mr > 0) body.max_results = mr;
+  const minR = parseFloat(ratingEl.value); if (!isNaN(minR)) body.min_rating = minR;
+  body.enrich_details = enrichEl.checked;
+  const extras = extraLocEl.value.split("\n").map((s) => s.trim()).filter(Boolean);
+  if (extras.length) body.extra_locations = extras;
+  const exq = extraQEl.value.split("\n").map((s) => s.trim()).filter(Boolean);
+  if (exq.length) body.extra_queries = exq;
+  if (autoAreasEl.checked) body.auto_areas = true;
+
+  let res;
+  try {
+    res = await fetch("/api/v1/search", { method: "POST", headers: headers(), body: JSON.stringify(body) });
+  } catch (e) { return fail("Cannot reach server. Is it running on :8000?"); }
+  if (!res.ok) {
+    let msg = res.statusText;
+    try { msg = (await res.json()).detail || msg; } catch (_) {}
+    return fail(msg + ` (HTTP ${res.status})`);
+  }
+  currentJob = (await res.json()).job_id;
+  activeMode = "search";
+  pollTimer = setInterval(poll, 3000);
+  poll();
+});
+
+// Show the cities localities before committing to a whole-city sweep.
+localitiesBtn.addEventListener("click", async () => {
+  const city = cityEl.value.trim();
+  if (!city) { localitiesInfoEl.textContent = "Enter a city name first."; return; }
+  if (!apiKeyEl.value.trim()) { localitiesInfoEl.textContent = "Enter your API key first."; return; }
+  localitiesBtn.disabled = true;
+  localitiesInfoEl.textContent = `Looking up localities in ${city}...`;
+  try {
+    const res = await fetch(`/api/v1/localities?city=${encodeURIComponent(city)}`, { headers: headers() });
+    if (!res.ok) {
+      let msg = res.statusText;
+      try { msg = (await res.json()).detail || msg; } catch (_) {}
+      localitiesInfoEl.textContent = `${msg} (HTTP ${res.status})`;
+      return;
+    }
+    const d = await res.json();
+    const preview = d.localities.slice(0, 10).join(", ");
+    localitiesInfoEl.textContent =
+      `${d.city}: ${d.total} localities (${d.source}) \u2014 ${preview}` +
+      (d.total > 10 ? ", \u2026" : "");
+  } catch (e) {
+    localitiesInfoEl.textContent = "Cannot reach server. Is it running on :8000?";
+  } finally {
+    localitiesBtn.disabled = false;
+  }
+});
+
+// city -> all localities -> one job sweeping restaurant in each -> combined CSV.
+citySweepBtn.addEventListener("click", async () => {
+  errorEl.textContent = "";
+  if (!apiKeyEl.value.trim()) { errorEl.textContent = "Enter your API key first."; return; }
+  const city = cityEl.value.trim();
+  if (!city) { errorEl.textContent = "Enter a city to sweep."; return; }
+  clearInterval(pollTimer);
+  citySweepBtn.disabled = true; dlBtn.disabled = true; filterEl.disabled = true;
+  allRecords = []; render([]);
+  countEl.textContent = "Resolving localities...";
+  cityStatusEl.innerHTML = `<span class="spinner"></span> finding localities in ${esc(city)}\u2026`;
+
+  const body = { city, query: cityQueryEl.value.trim() || "restaurant" };
+  const mr = parseInt(cityMaxEl.value, 10); if (!isNaN(mr) && mr > 0) body.max_results = mr;
+  const minR = parseFloat(cityRatingEl.value); if (!isNaN(minR)) body.min_rating = minR;
+  body.enrich_details = cityEnrichEl.checked;
+
+  let res;
+  try {
+    res = await fetch("/api/v1/city-search", { method: "POST", headers: headers(), body: JSON.stringify(body) });
+  } catch (e) { citySweepBtn.disabled = false; return fail("Cannot reach server. Is it running on :8000?"); }
+  if (!res.ok) {
+    citySweepBtn.disabled = false;
+    let msg = res.statusText;
+    try { msg = (await res.json()).detail || msg; } catch (_) {}
+    return fail(`${msg} (HTTP ${res.status})`);
+  }
+  currentJob = (await res.json()).job_id;
+  activeMode = "city";
+  cityStatusEl.innerHTML = `<span class="spinner"></span> sweeping every locality in ${esc(city)}\u2026`;
+  pollTimer = setInterval(poll, 3000);
+  poll();
+});
+
+async function poll() {
+  let d;
+  try {
+    const res = await fetch(`/api/v1/search/${currentJob}`, { headers: headers() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    d = await res.json();
+  } catch (e) { return fail("Polling failed: " + e.message); }
+
+  const runEl = activeMode === "city" ? cityStatusEl : statusEl;
+
+  if (d.status === "done") {
+    clearInterval(pollTimer);
+    searchBtn.disabled = false; citySweepBtn.disabled = false;
+    const html = `<span class="pill done">&#10003; Done</span> <strong>${d.total_results.toLocaleString()}</strong> listings extracted`;
+    runEl.innerHTML = html;
+    if (activeMode === "city") statusEl.innerHTML = html;
+    countEl.textContent = `${d.total_results.toLocaleString()} results found`;
+    dlBtn.disabled = false; filterEl.disabled = false;
+    loadResults();
+  } else if (d.status === "failed") {
+    clearInterval(pollTimer);
+    searchBtn.disabled = false; citySweepBtn.disabled = false;
+    runEl.innerHTML = `<span class="pill failed">&#10007; Failed</span>`;
+    fail(d.error || "Search failed.");
+  } else {
+    runEl.innerHTML = `<span class="spinner"></span><span class="pill ${d.status}">${d.status}</span> Extracting listings live, please wait...`;
+  }
+}
+
+async function loadResults() {
+  try {
+    const res = await fetch(`/api/v1/search/${currentJob}/results`, { headers: headers() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    allRecords = (await res.json()).records || [];
+  } catch (e) { return fail("Could not load results: " + e.message); }
+  render(allRecords);
+}
+
+function render(records) {
+  tbodyEl.innerHTML = "";
+  updateKPIs(records);
+  if (!records.length) {
+    tableEl.style.display = "none"; emptyEl.style.display = "block";
+    if (currentJob) emptyEl.innerHTML = `<div class="empty-icon">&#128577;</div><div>No results found for this search. Try broadening your query or location.</div>`;
+    return;
+  }
+  emptyEl.style.display = "none"; tableEl.style.display = "table";
+  const frag = document.createDocumentFragment();
+  records.forEach((r, i) => {
+    const tr = document.createElement("tr");
+
+    // Rating pill
+    let ratingBadge = `<span style="color:var(--text-faint)">&mdash;</span>`;
+    const ratingNum = parseFloat(r.rating);
+    if (!isNaN(ratingNum) && ratingNum > 0) {
+      let ratingClass = "rating-muted";
+      if (ratingNum >= 4.5) ratingClass = "rating-gold";
+      else if (ratingNum >= 4.0) ratingClass = "rating-green";
+      else if (ratingNum >= 3.5) ratingClass = "rating-blue";
+      ratingBadge = `<span class="rating-badge ${ratingClass}">★ ${ratingNum.toFixed(1)}</span>`;
+    }
+
+    // Phone link
+    let phoneHtml = `<span style="color:var(--text-faint)">&mdash;</span>`;
+    if (r.phone_number) {
+      phoneHtml = `<a href="tel:${esc(r.phone_number)}" class="phone-link">${esc(r.phone_number)}</a>`;
+    }
+
+    // Category badge
+    const catHtml = r.category ? `<span class="badge-tag">${esc(r.category)}</span>` : `<span style="color:var(--text-faint)">&mdash;</span>`;
+    const localityHtml = r.search_locality ? `<span class="badge-tag" style="background:rgba(59,130,246,0.12);color:#93c5fd;border-color:rgba(59,130,246,0.3);">${esc(r.search_locality)}</span>` : `<span style="color:var(--text-faint)">&mdash;</span>`;
+    const reviewsHtml = r.total_reviews ? `<span style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:#cbd5e1;">${Number(r.total_reviews).toLocaleString()}</span>` : `<span style="color:var(--text-faint)">&mdash;</span>`;
+
+    tr.innerHTML =
+      `<td style="font-family:'JetBrains Mono',monospace;color:var(--text-faint);">${i + 1}</td>` +
+      `<td><strong style="color:#ffffff;font-size:0.9rem;">${esc(r.business_name)}</strong></td>` +
+      `<td>${catHtml}</td>` +
+      `<td style="max-width:240px;color:#cbd5e1;font-size:0.82rem;line-height:1.35;">${esc(r.full_address)}</td>` +
+      `<td>${localityHtml}</td>` +
+      `<td>${phoneHtml}</td>` +
+      `<td>${ratingBadge}</td>` +
+      `<td>${reviewsHtml}</td>` +
+      `<td>${link(r.website, "Website")}</td>` +
+      `<td>${r.google_maps_link ? `<a href="${esc(r.google_maps_link)}" class="action-link" target="_blank" rel="noopener">Map &nearr;</a>` : `<span style="color:var(--text-faint)">&mdash;</span>`}</td>`;
+    frag.appendChild(tr);
+  });
+  tbodyEl.appendChild(frag);
+  countEl.textContent = `${records.length.toLocaleString()} result${records.length === 1 ? '' : 's'}`;
+}
+
+filterEl.addEventListener("input", () => {
+  const q = filterEl.value.trim().toLowerCase();
+  if (!q) return render(allRecords);
+  const filtered = allRecords.filter((r) =>
+    [r.business_name, r.category, r.full_address, r.phone_number, r.website, r.search_locality]
+      .some((v) => String(v ?? "").toLowerCase().includes(q)));
+  render(filtered);
+});
+
+dlBtn.addEventListener("click", async () => {
+  const res = await fetch(`/api/v1/search/${currentJob}/download`, { headers: headers() });
+  if (!res.ok) return fail("Download failed.");
+  const blob = await res.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `results_${currentJob.slice(0, 8)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+function fail(msg) {
+  clearInterval(pollTimer);
+  searchBtn.disabled = false;
+  citySweepBtn.disabled = false;
+  errorEl.textContent = msg;
+  (activeMode === "city" ? cityStatusEl : statusEl).innerHTML = "";
+}
+</script>
+</body>
+</html>

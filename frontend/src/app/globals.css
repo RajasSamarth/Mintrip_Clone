@@ -1,0 +1,411 @@
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Work+Sans:wght@300;400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,300..700&family=Instrument+Serif:ital@0;1&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Work Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Instrument Serif", "Iowan Old Style", "Times New Roman", serif;
+  --font-heading: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Work Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* Aurora UI — Adventure Orange + Map Teal */
+  --color-primary: #EA580C;
+  --color-on-primary: #000000;
+  --color-secondary: #0891B2;
+  --color-on-secondary: #000000;
+  --color-accent: #D97706;
+  --color-on-accent: #000000;
+  --color-background: #FFF7ED;
+  --color-foreground: #0F172A;
+  --color-card: #FFFFFF;
+  --color-card-foreground: #0F172A;
+  --color-muted: #FDF4F0;
+  --color-muted-foreground: #475569;
+  --color-border: #FCEAE1;
+  --color-destructive: #DC2626;
+  --color-on-destructive: #FFFFFF;
+  --color-ring: #EA580C;
+
+  --color-paper: #f7f5ef;
+  --color-cream: #f1efe6;
+  --color-ink: #121212;
+  --color-ink-soft: #2a2a26;
+  --color-muted: #6f6d66;
+  --color-line: #e3dfd3;
+  --color-olive: #434717;
+  --color-lime: #f1f2ba;
+  --color-tomato: #e86a4a;
+  --color-mint: #b8e6b0;
+  --color-sky: #a8d8ea;
+  --color-gold: #e8c547;
+  --color-sand: #ece7da;
+
+  --radius-4xl: 2rem;
+  --radius-5xl: 2.75rem;
+  --radius-6xl: 3.5rem;
+
+  --shadow-luxe: 0 24px 60px -24px rgba(18, 18, 18, 0.3);
+  --shadow-card: 0 10px 30px -18px rgba(18, 18, 18, 0.35);
+
+  /* Aurora UI spacing */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4rem;
+
+  /* Aurora UI shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.15);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: var(--color-lime);
+    color: var(--color-ink);
+  }
+
+  h1, h2, h3, h4 {
+    letter-spacing: -0.03em;
+  }
+
+  button, a, input, textarea, select {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  input, textarea, select {
+    font: inherit;
+  }
+}
+
+.font-serif-italic {
+  font-family: var(--font-serif);
+  font-style: italic;
+  letter-spacing: -0.02em;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(18, 18, 18, 0.18) transparent;
+}
+.thin-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(18, 18, 18, 0.18);
+  border-radius: 999px;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.glass-dark {
+  background: rgba(18, 18, 18, 0.58);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+.text-pretty {
+  text-wrap: pretty;
+}
+
+.hairline {
+  border-bottom: 1px solid var(--color-line);
+}
+
+.lift {
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lift:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-card);
+}
+
+.media-zoom img {
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.media-zoom:hover img {
+  transform: scale(1.045);
+}
+
+@keyframes floaty {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.animate-floaty {
+  animation: floaty 6s ease-in-out infinite;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, rgba(18,18,18,0.04) 25%, rgba(18,18,18,0.09) 37%, rgba(18,18,18,0.04) 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+.typing-dot {
+  animation: pulse-dot 1.2s infinite ease-in-out;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+/* MapLibre marker styling */
+.mt-marker {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: #121212;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  border: 2px solid #fff;
+  box-shadow: 0 6px 18px rgba(18, 18, 18, 0.28);
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease;
+  font-family: var(--font-sans);
+  user-select: none;
+}
+.mt-marker:hover {
+  transform: scale(1.12);
+}
+.mt-marker[data-active="true"] {
+  transform: scale(1.22);
+  box-shadow: 0 0 0 5px rgba(232, 106, 74, 0.24), 0 8px 22px rgba(18, 18, 18, 0.32);
+  background: var(--color-tomato);
+}
+.mt-marker[data-category="hotel"] {
+  background: var(--color-olive);
+  border-radius: 11px;
+}
+.mt-marker[data-category="restaurant"] {
+  background: var(--color-tomato);
+}
+.mt-marker[data-category="cafe"] {
+  background: #9a5f2c;
+}
+.mt-marker[data-category="attraction"] {
+  background: #2f4a63;
+}
+.mt-marker[data-category="activity"] {
+  background: #6b4f8a;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.animate-shimmer {
+  animation: shimmer 1.6s linear infinite;
+}
+
+.maplibregl-ctrl-group {
+  border-radius: 14px !important;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(18, 18, 18, 0.12) !important;
+}
+.maplibregl-ctrl-attrib {
+  font-size: 10px !important;
+  background: rgba(255, 255, 255, 0.7) !important;
+}
+
+.aspect-portrait {
+  aspect-ratio: 4 / 5;
+}
+
+.hero-mask {
+  background: linear-gradient(180deg, rgba(18, 18, 18, 0.38) 0%, rgba(18, 18, 18, 0.08) 38%, rgba(18, 18, 18, 0.72) 100%);
+}
+
+/* ===== Aurora UI Utilities ===== */
+
+.focus-ring-aurora {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.2);
+}
+.focus-ring-aurora:focus {
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.5);
+}
+
+.btn-aurora-primary {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  border-radius: 0.5rem;
+  font-weight: 600;
+  transition: all 200ms ease;
+  cursor: pointer;
+  border: none;
+}
+.btn-aurora-primary:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+.btn-aurora-primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.5);
+}
+
+.btn-aurora-secondary {
+  background: transparent;
+  color: var(--color-foreground);
+  border: 2px solid var(--color-primary);
+  border-radius: 0.5rem;
+  font-weight: 600;
+  transition: all 200ms ease;
+  cursor: pointer;
+}
+.btn-aurora-secondary:hover {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+.btn-aurora-secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.5);
+}
+
+.card-aurora {
+  background: var(--color-card);
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  transition: all 200ms ease;
+  cursor: pointer;
+}
+.card-aurora:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+/* Aurora mesh gradient backgrounds */
+.blob-gradient {
+  position: relative;
+  overflow: hidden;
+}
+.blob-gradient::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(234, 88, 12, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(8, 145, 178, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 40% 80%, rgba(217, 119, 6, 0.1) 0%, transparent 50%);
+  animation: blob-move 12s ease-in-out infinite;
+  z-index: 0;
+}
+.blob-gradient > * {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes blob-move {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 40px) scale(0.9); }
+}
+
+/* Reduced motion: disable animated blobs */
+@media (prefers-reduced-motion: reduce) {
+  .blob-gradient::before {
+    animation: none;
+    display: none;
+  }
+  .animate-floaty,
+  .animate-fade-up,
+  .animate-shimmer {
+    animation: none;
+  }
+  .btn-aurora-primary:hover,
+  .btn-aurora-secondary:hover,
+  .card-aurora:hover {
+    transform: none;
+  }
+}
+
+/* Skip link */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  z-index: -9999;
+}
+.skip-link:focus {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  width: auto;
+  height: auto;
+  padding: 0.75rem 1.5rem;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  border-radius: 0.375rem;
+  font-weight: 600;
+  z-index: 9999;
+  text-decoration: underline;
+}
+
+/* Sticky header offset for focus-not-obscured */
+header + main,
+main > :first-child {
+  scroll-margin-top: 80px;
+}

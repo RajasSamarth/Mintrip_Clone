@@ -1,0 +1,18 @@
+# Render free-tier blueprint. See https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: google-maps-business-extractor
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: API_KEY
+        sync: false
+      - key: OUTPUT_DIR
+        value: output
+      - key: USE_PLAYWRIGHT_SOURCE
+        value: "1"
+      - key: PLAYWRIGHT_FULL_CAP
+        value: "500"
+      - key: JOB_WORKERS
+        value: "1"

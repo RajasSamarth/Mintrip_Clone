@@ -1,0 +1,111 @@
+{
+  "title": "Google Maps Business Extractor Input",
+  "description": "Configure search query, target location, and extraction parameters for Google Maps business listings.",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "query": {
+      "title": "Search Query",
+      "type": "string",
+      "description": "Category or keyword to search for on Google Maps (e.g. 'dental clinic', 'restaurants', 'gym').",
+      "editor": "textfield",
+      "prefill": "dental clinic"
+    },
+    "location": {
+      "title": "Location",
+      "type": "string",
+      "description": "City, locality, area, or landmark (e.g. 'Dharampeth, Nagpur', 'New York, NY').",
+      "editor": "textfield",
+      "prefill": "Dharampeth, Nagpur"
+    },
+    "max_results": {
+      "title": "Max Results",
+      "type": "integer",
+      "description": "Maximum number of unique listings to extract. This is a scraping budget: the run stops as soon as it is filled instead of sweeping every area and trimming afterwards. Leave empty or set to null/0 to collect all available listings (this sweeps every discovered area and can take a long time).",
+      "editor": "number",
+      "default": null,
+      "minimum": 0,
+      "maximum": 10000,
+      "nullable": true
+    },
+    "min_rating": {
+      "title": "Minimum Rating",
+      "type": "number",
+      "description": "Filter listings to only include businesses with at least this star rating (e.g. 4.0).",
+      "editor": "number",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 5,
+      "nullable": true
+    },
+    "enrich_details": {
+      "title": "Enrich Full Details",
+      "type": "boolean",
+      "description": "When enabled, visits each business page to extract phone numbers, website URLs, and full opening hours. Uncheck for ultra-fast list-level extraction.",
+      "default": true
+    },
+    "auto_areas": {
+      "title": "Auto-Discover City Areas",
+      "type": "boolean",
+      "description": "Automatically discover the city's localities via OpenStreetMap and sweep them to get past Google's ~120-listing feed limit. If OpenStreetMap is unavailable, a coordinate grid over the city is swept instead. With a Max Results budget the run stops as soon as the budget is filled, so this does not slow small jobs down.",
+      "default": true
+    },
+    "max_areas": {
+      "title": "Max Areas to Sweep",
+      "type": "integer",
+      "description": "Maximum number of auto-discovered city localities to add to this run. Leave unset for no limit — every discovered area is available to the sweep (scraping still stops early once Max Results is reached).",
+      "editor": "number",
+      "default": null,
+      "minimum": 1,
+      "nullable": true
+    },
+    "extra_locations": {
+      "title": "Additional Locations",
+      "type": "array",
+      "description": "List of additional areas or localities to scrape and merge in this run.",
+      "editor": "json",
+      "default": []
+    },
+    "extra_queries": {
+      "title": "Additional Query Keywords",
+      "type": "array",
+      "description": "List of additional query keyword variations to sweep and merge.",
+      "editor": "json",
+      "default": []
+    },
+    "export_excel": {
+      "title": "Save Formatted Excel File",
+      "type": "boolean",
+      "description": "Generate a professionally styled multi-sheet Excel file (.xlsx) and save it to the Apify Key-Value Store as 'OUTPUT.xlsx'.",
+      "default": true
+    },
+    "proxy_configuration": {
+      "title": "Proxy Configuration",
+      "type": "object",
+      "description": "Optional: Enable if you have Apify Residential Proxies or custom proxies. Leave disabled for standard direct connection.",
+      "editor": "proxy",
+      "default": {
+        "useApifyProxy": false
+      }
+    },
+    "use_playwright_source": {
+      "title": "Use Live Playwright Scraper",
+      "type": "boolean",
+      "description": "True to run live Google Maps scraping via Playwright Chromium. Set to false for synthetic demo testing.",
+      "default": true
+    },
+    "max_runtime_minutes": {
+      "title": "Max Runtime (Minutes)",
+      "type": "integer",
+      "description": "Optional runtime limit in minutes before stopping cleanly and exporting all collected data to Excel/CSV. Default is 720 minutes (12 hours). Set to 0 for unlimited (runs until all results are fetched or platform timeout).",
+      "editor": "number",
+      "default": 720,
+      "minimum": 0,
+      "nullable": true
+    }
+  },
+  "required": [
+    "query",
+    "location"
+  ]
+}

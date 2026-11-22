@@ -1,0 +1,1 @@
+"""Mindtrip reference asset cloner."""
