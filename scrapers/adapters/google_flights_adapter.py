@@ -38,6 +38,140 @@ ALIASES: dict[str, tuple[str, ...]] = {
     "id": ("id", "flight_id", "offer_id"),
 }
 
+AIRLINE_NAME_TO_IATA: dict[str, str] = {
+    "american": "AA",
+    "american airlines": "AA",
+    "united": "UA",
+    "united airlines": "UA",
+    "delta": "DL",
+    "delta air lines": "DL",
+    "frontier": "F9",
+    "frontier airlines": "F9",
+    "alaska": "AS",
+    "alaska airlines": "AS",
+    "jetblue": "B6",
+    "jetblue airways": "B6",
+    "southwest": "WN",
+    "southwest airlines": "WN",
+    "spirit": "NK",
+    "spirit airlines": "NK",
+    "sun country": "SY",
+    "sun country airlines": "SY",
+    "hawaiian": "HA",
+    "hawaiian airlines": "HA",
+    "allegiant": "G4",
+    "allegiant air": "G4",
+    "breeze": "MX",
+    "breeze airways": "MX",
+    "avelo": "XP",
+    "air canada": "AC",
+    "westjet": "WS",
+    "porter": "PD",
+    "porter airlines": "PD",
+    "flair": "F8",
+    "aeromexico": "AM",
+    "volaris": "Y4",
+    "indigo": "6E",
+    "air india": "AI",
+    "air india express": "IX",
+    "vistara": "UK",
+    "spicejet": "SG",
+    "akasa air": "QP",
+    "akasa": "QP",
+    "alliance air": "9I",
+    "emirates": "EK",
+    "qatar airways": "QR",
+    "qatar": "QR",
+    "etihad": "EY",
+    "etihad airways": "EY",
+    "flydubai": "FZ",
+    "air arabia": "G9",
+    "saudia": "SV",
+    "gulf air": "GF",
+    "oman air": "WY",
+    "kuwait airways": "KU",
+    "british airways": "BA",
+    "virgin atlantic": "VS",
+    "lufthansa": "LH",
+    "air france": "AF",
+    "klm": "KL",
+    "swiss": "LX",
+    "austrian": "OS",
+    "brussels airlines": "SN",
+    "iberia": "IB",
+    "vueling": "VY",
+    "ryanair": "FR",
+    "easyjet": "U2",
+    "wizz air": "W6",
+    "tap air portugal": "TP",
+    "ita airways": "AZ",
+    "finnair": "AY",
+    "sas": "SK",
+    "scandinavian airlines": "SK",
+    "norwegian": "DY",
+    "aer lingus": "EI",
+    "icelandair": "FI",
+    "turkish airlines": "TK",
+    "pegasus": "PC",
+    "lot": "LO",
+    "lot polish airlines": "LO",
+    "aegean": "A3",
+    "singapore airlines": "SQ",
+    "scoot": "TR",
+    "ana": "NH",
+    "all nippon airways": "NH",
+    "jal": "JL",
+    "japan airlines": "JL",
+    "cathay pacific": "CX",
+    "korean air": "KE",
+    "asiana": "OZ",
+    "asiana airlines": "OZ",
+    "thai airways": "TG",
+    "bangkok airways": "PG",
+    "vietnam airlines": "VN",
+    "malaysia airlines": "MH",
+    "airasia": "AK",
+    "garuda indonesia": "GA",
+    "philippine airlines": "PR",
+    "eva air": "BR",
+    "china airlines": "CI",
+    "qantas": "QF",
+    "jetstar": "JQ",
+    "virgin australia": "VA",
+    "air new zealand": "NZ",
+    "ethiopian": "ET",
+    "ethiopian airlines": "ET",
+    "egyptair": "MS",
+    "royal air maroc": "AT",
+    "kenya airways": "KQ",
+    "latam": "LA",
+    "avianca": "AV",
+    "copa": "CM",
+    "copa airlines": "CM",
+    "azul": "AD",
+}
+
+
+def _resolve_airline_code(airline: str, explicit_code: str = "") -> str:
+    """Resolve a 2-character IATA carrier code from explicit input or airline name."""
+    code = str(explicit_code or "").strip().upper()
+    if code:
+        return code
+    raw = str(airline or "").strip()
+    if not raw:
+        return ""
+    # Handle strings like "American, Operated by SkyWest" or "United · Lufthansa"
+    primary = re.split(r"[,·/|]|operated by", raw, maxsplit=1, flags=re.I)[0].strip().lower()
+    if primary in AIRLINE_NAME_TO_IATA:
+        return AIRLINE_NAME_TO_IATA[primary]
+    cleaned = re.sub(r"\s+(airlines?|airways|air lines|air)\s*$", "", primary).strip()
+    if cleaned in AIRLINE_NAME_TO_IATA:
+        return AIRLINE_NAME_TO_IATA[cleaned]
+    for name, iata in AIRLINE_NAME_TO_IATA.items():
+        if name in primary:
+            return iata
+    return ""
+
 
 def _pick(row: dict[str, Any], key: str) -> Any:
     for alias in ALIASES[key]:
@@ -108,8 +242,27 @@ def _to_record(row: dict[str, Any], fallback_date: str = "", index: int = 0) -> 
     raw_dep = _pick(row, "departure_time") or date_hint
     departure = _normalize_time(raw_dep, str(date_hint))
     raw_arr = _pick(row, "arrival_time") or ""
+    arr_str = str(raw_arr).strip()
+    arr_has_explicit_date = bool(
+        arr_str and ("T" in arr_str or (len(arr_str) >= 10 and arr_str[4] == "-" and arr_str[7] == "-"))
+    )
     arrival = _normalize_time(raw_arr, str(date_hint)) if raw_arr else ""
     duration = _duration_minutes(_pick(row, "duration_minutes"))
+    if arrival and departure and not arr_has_explicit_date:
+        try:
+            dep_dt = datetime.fromisoformat(str(departure))
+            arr_dt = datetime.fromisoformat(str(arrival))
+            if duration > 0:
+                est_arr = dep_dt + timedelta(minutes=duration)
+                max_days = max(3, (duration // 1440) + 3)
+                candidates = [arr_dt + timedelta(days=k) for k in range(max_days)]
+                valid = [c for c in candidates if c >= dep_dt] or candidates
+                arr_dt = min(valid, key=lambda c: abs((c - est_arr).total_seconds()))
+            elif arr_dt < dep_dt:
+                arr_dt = arr_dt + timedelta(days=1)
+            arrival = arr_dt.isoformat()
+        except ValueError:
+            pass
     if not arrival and departure and duration:
         try:
             arrival = (datetime.fromisoformat(str(departure)) + timedelta(minutes=duration)).isoformat()
@@ -173,10 +326,12 @@ def _to_record(row: dict[str, Any], fallback_date: str = "", index: int = 0) -> 
         else:
             flight_id = slugify(f"{airline}-{origin}-{destination}-{departure}-{stops_count}s-{duration}m-{index}")
 
+    airline_code = _resolve_airline_code(str(airline), str(_pick(row, "airline_code") or ""))
+
     return FlightRecord(
         id=flight_id,
         airline=str(airline),
-        airline_code=str(_pick(row, "airline_code") or ""),
+        airline_code=airline_code,
         flight_number=str(_pick(row, "flight_number") or ""),
         origin=str(origin),
         destination=str(destination),

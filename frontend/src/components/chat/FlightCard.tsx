@@ -1,7 +1,9 @@
 "use client";
 
-import { Plane, Clock, ArrowRight, ExternalLink } from "lucide-react";
+import { useState } from "react";
+import { Plane, Clock, ExternalLink, Plus } from "lucide-react";
 import { formatFlightPriceDisplay } from "@/lib/currencies";
+import { AddToTripModal } from "@/components/common/AddToTripModal";
 
 interface FlightLegInfo {
   id?: string;
@@ -58,6 +60,7 @@ interface FlightCardProps {
 }
 
 export function FlightCard({ card }: FlightCardProps) {
+  const [addToTripOpen, setAddToTripOpen] = useState(false);
   const airline = card.airline || "Airline";
   const flightNum = card.flight_number || "";
   const origin = card.origin || "ORG";
@@ -150,7 +153,7 @@ export function FlightCard({ card }: FlightCardProps) {
         )}
       </div>
 
-      <div className="pt-3 border-t border-line/50 flex items-center justify-between mt-2.5">
+      <div className="pt-3 border-t border-line/50 flex items-center justify-between gap-2 mt-2.5">
         <div>
           <span className="text-[10px] text-muted block leading-none">
             {pax > 1 ? `Total (${pax} pax)` : "Starting from"}
@@ -158,15 +161,32 @@ export function FlightCard({ card }: FlightCardProps) {
           <span className="text-sm font-bold text-ink">{priceDisplay}</span>
         </div>
 
-        <a
-          href={googleFlightsUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-olive transition-colors"
-        >
-          Book Flight <ExternalLink size={11} />
-        </a>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setAddToTripOpen(true)}
+            className="inline-flex items-center gap-1 rounded-full border border-line bg-white px-2.5 py-1.5 text-xs font-semibold text-ink hover:bg-cream transition-colors"
+            title="Add flight to trip"
+          >
+            <Plus size={11} className="text-olive" /> Trip
+          </button>
+          <a
+            href={googleFlightsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-olive transition-colors"
+          >
+            Book <ExternalLink size={11} />
+          </a>
+        </div>
       </div>
+
+      <AddToTripModal
+        isOpen={addToTripOpen}
+        onClose={() => setAddToTripOpen(false)}
+        itemType="flight"
+        itemData={card}
+      />
     </article>
   );
 }

@@ -368,6 +368,11 @@ def generate_fallback_flights(
         self_xfer = (i % 7 == 5)
         bag = "1 carry-on, 1 checked bag included" if (cabin_norm != "Economy" or i % 3 == 0) else "1 carry-on included"
 
+        booking_url = (
+            f"https://www.google.com/travel/flights?q=flights+from+{origin}+to+{destination}+on+{flight_date}+return+on+{ret_base_d.strftime('%Y-%m-%d')}&curr=INR&gl=in"
+            if is_round_trip
+            else f"https://www.google.com/travel/flights?q=flights+from+{origin}+to+{destination}+on+{flight_date}&curr=INR&gl=in"
+        )
         record = FlightRecord(
             id=slugify(f"{carrier_code}-{fl_num}-{origin}-{destination}-{flight_date}-{i}"),
             airline=carrier_name,
@@ -383,7 +388,7 @@ def generate_fallback_flights(
             price_inr=total_inr,
             cabin=cabin_norm,
             baggage=bag,
-            booking_url=f"https://www.google.com/travel/flights?q=flights+from+{origin}+to+{destination}+on+{flight_date}&curr=INR&gl=in",
+            booking_url=booking_url,
             source="google_flights",
             is_top_pick=is_top,
             emissions=em_text,
@@ -452,6 +457,7 @@ async def run_playwright_scraper(
     infants_lap: int = 0,
     currency: str = "INR",
     trip_type: str = "one-way",
+    return_date: str | None = None,
     max_results: int | None = None,
 ) -> list[dict[str, Any]]:
     """Attempt live scrape of Google Flights using Playwright with no cutoff."""
@@ -470,6 +476,7 @@ async def run_playwright_scraper(
         "infants_seat": infants_seat,
         "infants_lap": infants_lap,
         "trip_type": trip_type,
+        "return_date": return_date,
         "currency": currency.upper(),
         # Lets the browser stop paginating once it has enough cards instead of
         # exhausting every result (which used to blow the 120s scrape budget and
@@ -494,6 +501,173 @@ async def run_playwright_scraper(
         data = r.model_dump()
         out.append(data)
     return out
+
+
+def _normalize_live_records(
+    raw_dicts: list[dict[str, Any]],
+    fallback_date: str,
+    *,
+    mark_top_picks: bool = True,
+) -> list[FlightRecord]:
+    """Convert raw scraper dicts into deduplicated FlightRecord instances."""
+    records: list[FlightRecord] = []
+    seen: set[tuple[Any, ...]] = set()
+    for idx, raw in enumerate(raw_dicts):
+        raw["flight_date"] = fallback_date
+        rec = _to_record(raw, fallback_date=fallback_date, index=idx)
+        if not rec:
+            continue
+        key = (
+            str(rec.airline or ""),
+            str(rec.origin or ""),
+            str(rec.destination or ""),
+            str(rec.departure_time or ""),
+            int(rec.duration_minutes or 0),
+            round(float(rec.price_inr or rec.price_usd or 0), 2),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        rec.source = "google_flights_live"
+        if mark_top_picks and not rec.is_top_pick and idx < 4:
+            rec.is_top_pick = True
+        records.append(rec)
+    return records
+
+
+async def _scrape_live_leg(
+    *,
+    origin: str,
+    destination: str,
+    flight_date: str,
+    return_date: str | None = None,
+    cabin: str = "economy",
+    adults: int = 1,
+    children: int = 0,
+    infants_seat: int = 0,
+    infants_lap: int = 0,
+    currency: str = "INR",
+    trip_type: str = "one-way",
+    max_results: int | None = None,
+    max_attempts: int = 3,
+    mark_top_picks: bool = True,
+) -> list[FlightRecord]:
+    """Scrape a single Google Flights query with retry and recaptcha cooldown."""
+    raw_dicts: list[dict[str, Any]] = []
+    scrape_err: str | None = None
+    leg_started = time.monotonic()
+    per_attempt_timeout = 100.0
+    max_leg_seconds = 180.0
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            if sys.platform == "win32":
+                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+            raw_dicts = await asyncio.wait_for(
+                asyncio.to_thread(
+                    _run_scrape_in_thread,
+                    origin=origin,
+                    destination=destination,
+                    flight_date=flight_date,
+                    cabin=cabin,
+                    adults=adults,
+                    children=children,
+                    infants_seat=infants_seat,
+                    infants_lap=infants_lap,
+                    currency=currency,
+                    trip_type=trip_type,
+                    return_date=return_date,
+                    max_results=max_results,
+                ),
+                timeout=per_attempt_timeout,
+            )
+            if raw_dicts:
+                break
+            log.warning("Live scrape returned 0 cards for %s -> %s on %s (attempt %d)", origin, destination, flight_date, attempt)
+            scrape_err = "empty result set"
+        except asyncio.TimeoutError:
+            scrape_err = "timeout"
+            log.warning("Live scrape attempt %d timed out for %s -> %s on %s", attempt, origin, destination, flight_date)
+        except RecaptchaBlocked as exc:
+            scrape_err = "recaptcha"
+            log.warning("Live scrape attempt %d blocked by recaptcha for %s -> %s: %s", attempt, origin, destination, exc)
+        except BaseException as exc:
+            scrape_err = str(exc)
+            log.warning("Live scrape attempt %d encountered an issue: %s", attempt, exc)
+
+        if attempt >= max_attempts:
+            break
+        if time.monotonic() - leg_started > max_leg_seconds:
+            log.warning("Live scrape budget exhausted for %s -> %s after %ds", origin, destination, int(time.monotonic() - leg_started))
+            break
+        delay = 8.0 * attempt if scrape_err == "recaptcha" else 2.0 * attempt
+        log.info("Retrying %s -> %s in %.0fs (attempt %d/%d)", origin, destination, delay, attempt + 1, max_attempts)
+        await asyncio.sleep(delay)
+
+    if not raw_dicts:
+        log.warning("Live scrape failed after retries for %s -> %s on %s: %s", origin, destination, flight_date, scrape_err or "empty result set")
+        return []
+
+    records = _normalize_live_records(raw_dicts, fallback_date=flight_date, mark_top_picks=mark_top_picks)
+    log.info("Live scrape successfully normalized %d flight records for %s -> %s.", len(records), origin, destination)
+    return records
+
+
+def _pair_return_flights(
+    outbound_records: list[FlightRecord],
+    return_records: list[FlightRecord],
+    return_date: str,
+) -> None:
+    """Attach live return-leg flights onto outbound records, preferring same airline."""
+    if not outbound_records or not return_records:
+        return
+
+    by_code: dict[str, list[FlightRecord]] = {}
+    by_name: dict[str, list[FlightRecord]] = {}
+    for ret in return_records:
+        code = (ret.airline_code or "").strip().upper()
+        name = (ret.airline or "").strip().lower()
+        if code:
+            by_code.setdefault(code, []).append(ret)
+        if name:
+            by_name.setdefault(name, []).append(ret)
+
+    code_cursors: dict[str, int] = {}
+    name_cursors: dict[str, int] = {}
+    fallback_cursor = 0
+
+    for rec in outbound_records:
+        code = (rec.airline_code or "").strip().upper()
+        name = (rec.airline or "").strip().lower()
+        ret: FlightRecord | None = None
+        if code and code in by_code:
+            pool = by_code[code]
+            pos = code_cursors.get(code, 0)
+            ret = pool[pos % len(pool)]
+            code_cursors[code] = pos + 1
+        elif name and name in by_name:
+            pool = by_name[name]
+            pos = name_cursors.get(name, 0)
+            ret = pool[pos % len(pool)]
+            name_cursors[name] = pos + 1
+        else:
+            ret = return_records[fallback_cursor % len(return_records)]
+            fallback_cursor += 1
+
+        rec.metadata = rec.metadata or {}
+        rec.metadata["trip_type"] = "round-trip"
+        rec.metadata["return_flight"] = {
+            "airline": ret.airline,
+            "airline_code": ret.airline_code,
+            "flight_number": ret.flight_number,
+            "origin": ret.origin,
+            "destination": ret.destination,
+            "departure_time": str(ret.departure_time),
+            "arrival_time": str(ret.arrival_time),
+            "duration_minutes": ret.duration_minutes,
+            "stops": ret.stops,
+            "date": return_date,
+        }
 
 
 async def search_flights(
@@ -568,152 +742,52 @@ async def search_flights(
     flight_date = date.strip() or (datetime.now() + timedelta(days=14)).strftime("%Y-%m-%d")
 
     if use_live:
-        log.info("Attempting live Google Flights scrape: %s -> %s on %s (curr=%s)...", origin, destination, flight_date, currency)
-        raw_dicts: list[dict[str, Any]] = []
-        scrape_err: str | None = None
-        leg_started = time.monotonic()
-        # Retry budget: scrapes normally finish in 25-45s. Give each attempt
-        # enough room to finish so its browser is never left running while the
-        # next attempt starts, and allow up to 3 attempts / ~3 min per leg.
-        max_attempts = 3
-        per_attempt_timeout = 100.0
-        max_leg_seconds = 180.0
-
-        for attempt in range(1, max_attempts + 1):
-            try:
-                if sys.platform == "win32":
-                    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-                raw_dicts = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        _run_scrape_in_thread,
-                        origin=origin,
-                        destination=destination,
-                        flight_date=flight_date,
-                        cabin=cabin,
-                        adults=adults,
-                        children=children,
-                        infants_seat=infants_seat,
-                        infants_lap=infants_lap,
-                        currency=currency,
-                        trip_type=trip_type,
-                        max_results=max_results,
-                    ),
-                    timeout=per_attempt_timeout,
-                )
-                if raw_dicts:
-                    break  # got results, no need to retry
-                log.warning("Live scrape returned 0 cards for %s -> %s on %s (attempt %d)", origin, destination, flight_date, attempt)
-                scrape_err = "empty result set"
-            except asyncio.TimeoutError:
-                scrape_err = "timeout"
-                log.warning("Live scrape attempt %d timed out for %s -> %s on %s", attempt, origin, destination, flight_date)
-            except RecaptchaBlocked as exc:
-                scrape_err = "recaptcha"
-                log.warning("Live scrape attempt %d blocked by recaptcha for %s -> %s: %s", attempt, origin, destination, exc)
-            except BaseException as exc:
-                scrape_err = str(exc)
-                log.warning("Live scrape attempt %d encountered an issue: %s", attempt, exc)
-
-            if attempt >= max_attempts:
-                break
-            if time.monotonic() - leg_started > max_leg_seconds:
-                log.warning("Live scrape budget exhausted for %s -> %s after %ds", origin, destination, int(time.monotonic() - leg_started))
-                break
-            # Recaptcha needs a longer cool-down than a plain empty/slow load.
-            delay = 8.0 * attempt if scrape_err == "recaptcha" else 2.0 * attempt
-            log.info("Retrying %s -> %s in %.0fs (attempt %d/%d)", origin, destination, delay, attempt + 1, max_attempts)
-            await asyncio.sleep(delay)
-
-        if not raw_dicts:
-            log.warning("Live scrape failed after retries for %s -> %s on %s: %s", origin, destination, flight_date, scrape_err or "empty result set")
-            records = []
-        else:
-            seen: set[tuple[Any, ...]] = set()
-            for idx, raw in enumerate(raw_dicts):
-                raw["flight_date"] = flight_date
-                rec = _to_record(raw, fallback_date=flight_date, index=idx)
-                if not rec:
-                    continue
-                # Dedupe: Google sometimes renders the same flight twice (e.g.
-                # separate fare cards or pagination overlap), which would show
-                # duplicate itineraries in the UI.
-                key = (
-                    str(rec.airline or ""),
-                    str(rec.origin or ""),
-                    str(rec.destination or ""),
-                    str(rec.departure_time or ""),
-                    int(rec.duration_minutes or 0),
-                    round(float(rec.price_inr or rec.price_usd or 0), 2),
-                )
-                if key in seen:
-                    continue
-                seen.add(key)
-                rec.source = "google_flights_live"
-                # Default top 4 as top picks if not already set
-                if not rec.is_top_pick and idx < 4:
-                    rec.is_top_pick = True
-                records.append(rec)
-            log.info("Live scrape successfully normalized %d flight records.", len(records))
+        log.info("Attempting live Google Flights scrape: %s -> %s on %s (curr=%s, trip=%s)...", origin, destination, flight_date, currency, trip_type)
+        records = await _scrape_live_leg(
+            origin=origin,
+            destination=destination,
+            flight_date=flight_date,
+            return_date=return_date if trip_type == "round-trip" else None,
+            cabin=cabin,
+            adults=adults,
+            children=children,
+            infants_seat=infants_seat,
+            infants_lap=infants_lap,
+            currency=currency,
+            trip_type=trip_type,
+            max_results=max_results,
+            max_attempts=3,
+            mark_top_picks=True,
+        )
 
     # If round_trip is requested with return_date, also scrape the return leg.
     # Return legs are paired onto the outbound records as `return_flight`
     # metadata — they must never appear as separate search results.
-    if trip_type == "round-trip" and return_date and use_live:
+    if trip_type == "round-trip" and return_date and use_live and records:
         log.info("Attempting live scrape for return leg: %s -> %s on %s...", destination, origin, return_date)
-        try:
-            return_raw: list[dict[str, Any]] = []
-            return_records: list[FlightRecord] = []
-            if sys.platform == "win32":
-                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-            return_raw = await asyncio.wait_for(
-                asyncio.to_thread(
-                    _run_scrape_in_thread,
-                    origin=destination,
-                    destination=origin,
-                    flight_date=return_date,
-                    cabin=cabin,
-                    adults=adults,
-                    children=children,
-                    infants_seat=infants_seat,
-                    infants_lap=infants_lap,
-                    currency=currency,
-                    trip_type="one-way",
-                    max_results=max_results,
-                ),
-                timeout=180.0,
-            )
-
-            for idx, raw in enumerate(return_raw):
-                raw["flight_date"] = return_date
-                rec = _to_record(raw, fallback_date=return_date, index=idx)
-                if rec:
-                    rec.source = "google_flights_live"
-                    return_records.append(rec)
-
-            if records and return_records:
-                for idx, rec in enumerate(records):
-                    ret = return_records[idx % len(return_records)]
-                    rec.metadata = rec.metadata or {}
-                    rec.metadata["trip_type"] = "round-trip"
-                    rec.metadata["return_flight"] = {
-                        "airline": ret.airline,
-                        "airline_code": ret.airline_code,
-                        "flight_number": ret.flight_number,
-                        "origin": ret.origin,
-                        "destination": ret.destination,
-                        "departure_time": str(ret.departure_time),
-                        "arrival_time": str(ret.arrival_time),
-                        "duration_minutes": ret.duration_minutes,
-                        "stops": ret.stops,
-                        "date": return_date,
-                    }
-            log.info(
-                "Return leg live scrape yielded %d records (paired with %d outbound).",
-                len(return_records),
-                len(records),
-            )
-        except Exception as ret_err:
-            log.warning("Return leg live scrape error: %s", ret_err)
+        await asyncio.sleep(2.0)
+        return_records = await _scrape_live_leg(
+            origin=destination,
+            destination=origin,
+            flight_date=return_date,
+            return_date=None,
+            cabin=cabin,
+            adults=adults,
+            children=children,
+            infants_seat=infants_seat,
+            infants_lap=infants_lap,
+            currency=currency,
+            trip_type="one-way",
+            max_results=max_results,
+            max_attempts=2,
+            mark_top_picks=False,
+        )
+        _pair_return_flights(records, return_records, return_date)
+        log.info(
+            "Return leg live scrape yielded %d records (paired with %d outbound).",
+            len(return_records),
+            len(records),
+        )
 
     total_pax = max(1, adults + children)
     if not records and allow_fallback:
@@ -723,7 +797,7 @@ async def search_flights(
             destination=destination,
             flight_date=flight_date,
             cabin=cabin,
-            count=max_results or 5,
+            count=max_results or 24,
             trip_type=trip_type,
             return_date=return_date,
             adults=adults,
@@ -736,8 +810,9 @@ async def search_flights(
         )
         return []
     else:
-        # Live scrape yielded records; ensure multi-passenger pricing and paired return flights are populated
-        for idx, rec in enumerate(records):
+        # Live scrape yielded records; ensure multi-passenger pricing metadata is populated.
+        # Never fabricate synthetic return_flight objects for live Google Flights records.
+        for rec in records:
             rec.metadata = rec.metadata or {}
             rec.metadata["passengers"] = total_pax
             rec.metadata["trip_type"] = trip_type
@@ -753,29 +828,6 @@ async def search_flights(
             rec.metadata["total_price_inr"] = total_inr
             rec.price_usd = total_usd
             rec.price_inr = total_inr
-
-            if trip_type == "round-trip" and not rec.metadata.get("return_flight"):
-                ret_d = return_date or (datetime.now() + timedelta(days=21)).strftime("%Y-%m-%d")
-                try:
-                    ret_base = datetime.strptime(ret_d, "%Y-%m-%d")
-                except Exception:
-                    ret_base = datetime.now() + timedelta(days=21)
-                ret_hour = [7, 9, 11, 14, 16, 18, 20, 22][idx % 8]
-                ret_dep = ret_base.replace(hour=ret_hour, minute=(idx * 20) % 60, second=0)
-                dur = rec.duration_minutes or 210
-                ret_arr = ret_dep + timedelta(minutes=dur)
-                rec.metadata["return_flight"] = {
-                    "airline": rec.airline,
-                    "airline_code": rec.airline_code,
-                    "flight_number": f"{rec.airline_code} {200 + idx * 19}",
-                    "origin": destination,
-                    "destination": origin,
-                    "departure_time": ret_dep.isoformat(),
-                    "arrival_time": ret_arr.isoformat(),
-                    "duration_minutes": dur,
-                    "stops": rec.stops,
-                    "date": ret_d,
-                }
 
     if max_results and max_results > 0:
         return records[:max_results]

@@ -21,7 +21,6 @@ assistant and visual itinerary planner.
 cd backend
 python -m venv .venv
 .venv\Scripts\activate        # Windows
-# source .venv/bin/activate   # macOS/Linux
 pip install -r requirements.txt
 cp ../.env.example .env       # edit keys if you have them
 python -m uvicorn main:app --reload --port 8000

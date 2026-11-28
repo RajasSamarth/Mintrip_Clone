@@ -29,6 +29,8 @@ export default function ChatPage() {
     created_at?: string;
     loading?: boolean;
     error?: string;
+    retryable?: boolean;
+    retryPrompt?: string;
     retryCount?: number;
   }>>([]);
   const [input, setInput] = useState("");
@@ -218,6 +220,7 @@ export default function ChatPage() {
         cards: [],
         pins: [],
         loading: true,
+        retryPrompt: userMessage,
       },
     ]);
 
@@ -342,6 +345,17 @@ export default function ChatPage() {
 
       if (aborted) {
         setStatusMessage("Stream cancelled.");
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId && m.loading
+              ? {
+                  ...m,
+                  message: m.message || "Request cancelled.",
+                  loading: false,
+                }
+              : m
+          )
+        );
         setTimeout(() => setStatusMessage(null), 3000);
         return;
       }
@@ -433,13 +447,16 @@ export default function ChatPage() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const q = params.get("q");
-      if (q && q.trim()) {
+      const dest = params.get("destination");
+      const prompt = (q && q.trim()) || (dest && dest.trim() ? `Plan a 3-day trip to ${dest.trim()}` : "");
+      if (prompt) {
         setInitialSent(true);
-        // Clean ?q= from URL history immediately so navigating back or refreshing never re-submits it!
+        // Clean ?q= / ?destination= from URL history immediately so refreshing never re-submits it!
         params.delete("q");
+        params.delete("destination");
         const remaining = params.toString();
         window.history.replaceState({}, "", window.location.pathname + (remaining ? `?${remaining}` : ""));
-        sendMessage(q.trim());
+        sendMessage(prompt);
       }
     }
   }, [sessionId, initialSent, sendMessage]);
@@ -494,7 +511,7 @@ export default function ChatPage() {
   }, [tripId]);
 
   return (
-    <div className="relative h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] bg-paper flex flex-col overflow-hidden">
+    <div className="relative h-[calc(100vh-4rem)] sm:h-[calc(100vh-4.5rem)] max-h-[calc(100vh-4rem)] sm:max-h-[calc(100vh-4.5rem)] bg-paper flex flex-col overflow-hidden">
       {/* Chat Workspace Controls Toolbar */}
       <div className="border-b border-line/70 bg-paper/90 px-5 py-2.5 backdrop-blur-md shadow-2xs shrink-0 z-20">
         <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-4">

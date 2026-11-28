@@ -20,6 +20,7 @@ interface MessageBubbleProps {
     loading?: boolean;
     error?: string;
     retryable?: boolean;
+    retryPrompt?: string;
     retryCount?: number;
   };
   onSendMessage?: (msg: string) => void;
@@ -68,9 +69,10 @@ export function MessageBubble({ message, onSendMessage }: MessageBubbleProps) {
   };
 
   const handleRetry = () => {
-    if (onSendMessage && message.message) {
+    const promptToRetry = message.retryPrompt || (!message.error ? message.message : "");
+    if (onSendMessage && promptToRetry) {
       setRetryCount((c) => c + 1);
-      onSendMessage(message.message);
+      onSendMessage(promptToRetry);
     }
   };
 
@@ -83,7 +85,21 @@ export function MessageBubble({ message, onSendMessage }: MessageBubbleProps) {
             : "bg-white border border-line/80 text-ink/90 font-normal"
         }`}
       >
-        {message.message ? (
+        {message.error ? (
+          <div className="flex items-center gap-2 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-700">
+            <AlertCircle size={14} className="shrink-0" />
+            <span>{message.message || message.error}</span>
+            {message.retryable && message.retryPrompt && (
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white border border-rose-200 text-rose-700 font-semibold hover:bg-rose-100 transition-colors shrink-0"
+              >
+                <RefreshCw size={12} /> Retry
+              </button>
+            )}
+          </div>
+        ) : message.message ? (
           isUser ? (
             message.message
           ) : (
@@ -95,18 +111,6 @@ export function MessageBubble({ message, onSendMessage }: MessageBubbleProps) {
             <span className="size-2 rounded-full bg-ink/60 typing-dot" />
             <span className="size-2 rounded-full bg-ink/60 typing-dot" />
           </span>
-        ) : message.error && message.retryable ? (
-          <div className="flex items-center gap-2 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-700">
-            <AlertCircle size={14} className="shrink-0" />
-            <span>{message.error}</span>
-            <button
-              type="button"
-              onClick={handleRetry}
-              className="ml-auto px-2 py-1 rounded text-rose-600 font-semibold hover:bg-rose-100 transition-colors"
-            >
-              <RefreshCw size={14} /> Retry
-            </button>
-          </div>
         ) : (
           <span className="text-ink/50">No response</span>
         )}

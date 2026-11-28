@@ -139,7 +139,70 @@ const QUICK_ROUTES = [
   { from: "DXB", to: "DEL", label: "Dubai to Delhi" },
 ];
 
+const CITY_TO_AIRPORT: Record<string, string> = {
+  kyoto: "KIX",
+  osaka: "KIX",
+  tokyo: "HND",
+  paris: "CDG",
+  rome: "FCO",
+  london: "LHR",
+  dubai: "DXB",
+  delhi: "DEL",
+  "new delhi": "DEL",
+  mumbai: "BOM",
+  bengaluru: "BLR",
+  bangalore: "BLR",
+  "new york": "JFK",
+  "san francisco": "SFO",
+  "los angeles": "LAX",
+  istanbul: "IST",
+  norway: "OSL",
+  lofoten: "BOO",
+  indonesia: "DPS",
+  bali: "DPS",
+  himalayas: "KTM",
+  kathmandu: "KTM",
+  egypt: "CAI",
+  cairo: "CAI",
+  sydney: "SYD",
+  singapore: "SIN",
+  bangkok: "BKK",
+  "swiss alps": "ZRH",
+  zurich: "ZRH",
+  switzerland: "ZRH",
+  goa: "GOI",
+  pune: "PNQ",
+};
+
+function resolveAirportCode(raw: string, airportsList: Airport[]): string {
+  const cleaned = (raw || "").trim();
+  if (!cleaned) return "";
+  const upper = cleaned.toUpperCase();
+  if (/^[A-Z]{3}$/.test(upper)) return upper;
+
+  const lower = cleaned.toLowerCase();
+  if (CITY_TO_AIRPORT[lower]) return CITY_TO_AIRPORT[lower];
+
+  const match = airportsList.find(
+    (a) =>
+      a.code.toUpperCase() === upper ||
+      a.city.toLowerCase() === lower ||
+      a.city.toLowerCase().includes(lower) ||
+      a.name.toLowerCase().includes(lower)
+  );
+  if (match) return match.code.toUpperCase();
+
+  for (const [city, code] of Object.entries(CITY_TO_AIRPORT)) {
+    if (lower.includes(city)) return code;
+  }
+  return upper.slice(0, 3);
+}
+
 export default function FlightsPage() {
+  // Pagination state — show 20 flights per page, "Show 20 more" to expand
+  const PAGE_SIZE = 20;
+  const [visibleFlightCount, setVisibleFlightCount] = useState(PAGE_SIZE);
+
   const [flights, setFlights] = useState<Flight[]>([]);
   const [airports, setAirports] = useState<Airport[]>([]);
   const [loading, setLoading] = useState(false);
@@ -224,6 +287,12 @@ export default function FlightsPage() {
   const [sortBy, setSortBy] = useState<"price" | "duration" | "departure">("price");
 
   // Click outside listener for all popovers
+  const [showOriginSuggestions, setShowOriginSuggestions] = useState(false);
+  const [showDestSuggestions, setShowDestSuggestions] = useState(false);
+  const originBoxRef = useRef<HTMLDivElement>(null);
+  const destBoxRef = useRef<HTMLDivElement>(null);
+  const autoSearchRanRef = useRef(false);
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (paxMenuRef.current && !paxMenuRef.current.contains(e.target as Node)) {
@@ -235,25 +304,76 @@ export default function FlightsPage() {
       if (cabinMenuRef.current && !cabinMenuRef.current.contains(e.target as Node)) {
         setShowCabinMenu(false);
       }
+      if (originBoxRef.current && !originBoxRef.current.contains(e.target as Node)) {
+        setShowOriginSuggestions(false);
+      }
+      if (destBoxRef.current && !destBoxRef.current.contains(e.target as Node)) {
+        setShowDestSuggestions(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Load airports on mount WITHOUT automatically triggering search
+  // Load airports on mount and hydrate URL query params if present
   useEffect(() => {
     async function init() {
+      let loadedAirports: Airport[] = [];
       try {
         const res = await api("/flights/airports");
         if (res.ok) {
           const json = await res.json();
-          setAirports(json.airports || []);
+          loadedAirports = json.airports || [];
+          setAirports(loadedAirports);
         }
       } catch (e) {
         console.warn("Failed to load airports:", e);
       }
+
+      if (typeof window !== "undefined" && !autoSearchRanRef.current) {
+        const params = new URLSearchParams(window.location.search);
+        const rawOrigin = params.get("origin") || params.get("from") || "";
+        const rawDest = params.get("destination") || params.get("to") || "";
+        const rawDate = params.get("date") || params.get("outbound_date") || "";
+        const rawReturn = params.get("return_date") || "";
+        const rawAdults = Number(params.get("adults") || "0");
+        const rawTripType = params.get("trip_type");
+        const shouldAutoSearch = params.get("auto_search") === "1";
+
+        const resolvedOrigin = resolveAirportCode(rawOrigin, loadedAirports);
+        const resolvedDest = resolveAirportCode(rawDest, loadedAirports);
+
+        if (resolvedOrigin) setOrigin(resolvedOrigin);
+        if (resolvedDest) setDestination(resolvedDest);
+        if (rawDate) setOutboundDate(rawDate);
+        if (rawReturn) {
+          setReturnDate(rawReturn);
+          if (!rawTripType) setTripType("round-trip");
+        }
+        if (rawTripType === "one-way" || rawTripType === "round-trip" || rawTripType === "multi-city") {
+          setTripType(rawTripType);
+        }
+        if (rawAdults >= 1 && rawAdults <= 9) {
+          setAdults(rawAdults);
+        }
+
+        if (shouldAutoSearch && resolvedOrigin && resolvedDest) {
+          autoSearchRanRef.current = true;
+          const nextTripType: "one-way" | "round-trip" =
+            rawTripType === "round-trip" || (rawReturn && rawTripType !== "one-way")
+              ? "round-trip"
+              : "one-way";
+          executeSearch(resolvedOrigin, resolvedDest, {
+            outboundDate: rawDate || undefined,
+            returnDate: rawReturn || undefined,
+            tripType: nextTripType,
+            adults: rawAdults >= 1 && rawAdults <= 9 ? rawAdults : undefined,
+          });
+        }
+      }
     }
     init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Filtered currencies for dropdown search
@@ -331,16 +451,34 @@ export default function FlightsPage() {
   }
 
   // Execute Search (Requires explicit user input)
-  async function executeSearch(customOrigin?: string, customDest?: string) {
-    const o = (customOrigin !== undefined ? customOrigin : origin).trim().toUpperCase();
-    const d = (customDest !== undefined ? customDest : destination).trim().toUpperCase();
+  async function executeSearch(
+    customOrigin?: string,
+    customDest?: string,
+    overrides?: {
+      outboundDate?: string;
+      returnDate?: string;
+      tripType?: "one-way" | "round-trip" | "multi-city";
+      adults?: number;
+    }
+  ) {
+    const rawO = customOrigin !== undefined ? customOrigin : origin;
+    const rawD = customDest !== undefined ? customDest : destination;
+    const o = resolveAirportCode(rawO, airports);
+    const d = resolveAirportCode(rawD, airports);
+    const activeTripType = overrides?.tripType ?? tripType;
+    const activeOutbound = overrides?.outboundDate ?? outboundDate;
+    const activeReturn = overrides?.returnDate ?? returnDate;
+    const activeAdults = overrides?.adults ?? adults;
 
-    if (tripType !== "multi-city" && (!o || !d)) {
+    if (o && o !== origin) setOrigin(o);
+    if (d && d !== destination) setDestination(d);
+
+    if (activeTripType !== "multi-city" && (!o || !d)) {
       setErrorMsg("Please enter both departure and destination airport codes (e.g. DEL to BOM) to search flights.");
       return;
     }
 
-    if (tripType === "multi-city") {
+    if (activeTripType === "multi-city") {
       const invalid = multiCityLegs.some((l) => !l.origin.trim() || !l.destination.trim());
       if (invalid) {
         setErrorMsg("Please enter origin and destination for all multi-city flight legs.");
@@ -361,7 +499,7 @@ export default function FlightsPage() {
     searchInFlightRef.current = true;
     setLoading(true);
     setHasSearched(true);
-    setLoadingStatus("Live scraping Google Flights...");
+    setLoadingStatus("Searching flights...");
     setErrorMsg("");
 
     let succeeded = false;
@@ -371,39 +509,29 @@ export default function FlightsPage() {
       // Step 1: POST /api/flights/search → get job_id immediately
       const payload: any = {
         cabin,
-        adults,
+        adults: activeAdults,
         children,
         infants_seat: infantsSeat,
         infants_lap: infantsLap,
         currency: selectedCurrency,
         live: true,
-        trip_type: tripType,
-        max_results: 30,
+        trip_type: activeTripType,
+        max_results: null,
       };
 
-      console.log("[flights] search payload:", {
-        origin: o,
-        destination: d,
-        adults,
-        children,
-        tripType,
-        outboundDate,
-        returnDate,
-      });
-
-      if (tripType === "multi-city") {
+      if (activeTripType === "multi-city") {
         payload.legs = multiCityLegs.map((l) => ({
-          origin: l.origin.trim().toUpperCase(),
-          destination: l.destination.trim().toUpperCase(),
+          origin: resolveAirportCode(l.origin, airports),
+          destination: resolveAirportCode(l.destination, airports),
           date: l.date,
         }));
-        payload.origin = multiCityLegs[0]?.origin || "DEL";
-        payload.destination = multiCityLegs[multiCityLegs.length - 1]?.destination || "BOM";
+        payload.origin = payload.legs[0]?.origin || "DEL";
+        payload.destination = payload.legs[payload.legs.length - 1]?.destination || "BOM";
       } else {
         payload.origin = o;
         payload.destination = d;
-        payload.outbound_date = outboundDate;
-        payload.return_date = tripType === "round-trip" ? returnDate : undefined;
+        payload.outbound_date = activeOutbound;
+        payload.return_date = activeTripType === "round-trip" ? activeReturn : undefined;
       }
 
       const resp = await api("/flights/search", {
@@ -475,6 +603,7 @@ export default function FlightsPage() {
             // Never show a partial multi-city journey: if any leg has no live
             // results, a complete itinerary cannot be built.
             setFlights([]);
+            setVisibleFlightCount(PAGE_SIZE);
             setErrorMsg(
               `Live Google Flights returned no results for ${failedLegs
                 .map((l: any) => `${l.origin} → ${l.destination}`)
@@ -482,8 +611,10 @@ export default function FlightsPage() {
             );
           } else if (statusJson.flights && statusJson.flights.length > 0) {
             setFlights(statusJson.flights);
+            setVisibleFlightCount(PAGE_SIZE);
           } else {
             setFlights([]);
+            setVisibleFlightCount(PAGE_SIZE);
             setErrorMsg(
               statusJson.message ||
                 `No live flights found for ${payload.origin} → ${payload.destination}. Try another date or route.`
@@ -495,6 +626,7 @@ export default function FlightsPage() {
 
         if (statusJson.status === "error") {
           setFlights([]);
+          setVisibleFlightCount(PAGE_SIZE);
           setErrorMsg(statusJson.message || "Flight search failed. Please try again.");
           succeeded = true;
           break;
@@ -503,12 +635,13 @@ export default function FlightsPage() {
         // status === "pending" - keep polling
         const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
         setLoadingStatus(
-          `Live scraping Google Flights... ${elapsedSec}s elapsed`
+          `Searching flights... ${elapsedSec}s elapsed`
         );
       }
 
       if (!succeeded && !controller.signal.aborted) {
         setFlights([]);
+        setVisibleFlightCount(PAGE_SIZE);
         setErrorMsg(
           "Flight search is taking too long. The scrape may still be running — please try again in a moment."
         );
@@ -533,12 +666,14 @@ export default function FlightsPage() {
 
       if (isConnectionReset) {
         setFlights([]);
+        setVisibleFlightCount(PAGE_SIZE);
         setErrorMsg(
           "Connection interrupted. The scrape may still be running. Please try again."
         );
       } else {
         console.warn("Live flight search failed:", err);
         setFlights([]);
+        setVisibleFlightCount(PAGE_SIZE);
         setErrorMsg(
           "Live Google Flights search failed. Please verify the airport codes and try again."
         );
@@ -685,17 +820,22 @@ export default function FlightsPage() {
     sortBy,
   ]);
 
-  // Separate Top Picks vs Other Flights
+  // Paginated flights — show PAGE_SIZE at a time, "Show 20 more" to expand
+  const paginatedFlights = useMemo(() => {
+    return filteredFlights.slice(0, visibleFlightCount);
+  }, [filteredFlights, visibleFlightCount]);
+
+  // Separate Top Picks vs Other Flights (from paginated set)
   const topPickFlights = useMemo(() => {
-    const explicitlyTagged = filteredFlights.filter((f) => f.is_top_pick);
+    const explicitlyTagged = paginatedFlights.filter((f) => f.is_top_pick);
     if (explicitlyTagged.length > 0) return explicitlyTagged;
-    return filteredFlights.slice(0, 4);
-  }, [filteredFlights]);
+    return paginatedFlights.slice(0, 4);
+  }, [paginatedFlights]);
 
   const otherFlights = useMemo(() => {
     const topIds = new Set(topPickFlights.map((f) => f.id));
-    return filteredFlights.filter((f) => !topIds.has(f.id));
-  }, [filteredFlights, topPickFlights]);
+    return paginatedFlights.filter((f) => !topIds.has(f.id));
+  }, [paginatedFlights, topPickFlights]);
 
   function formatFlightTime(isoStr: string) {
     try {
@@ -827,6 +967,7 @@ export default function FlightsPage() {
                 setOrigin("");
                 setDestination("");
                 setFlights([]);
+                setVisibleFlightCount(PAGE_SIZE);
                 setHasSearched(false);
                 setErrorMsg("");
                 setCabin("Economy");
@@ -1099,28 +1240,66 @@ export default function FlightsPage() {
           {/* Search Inputs: Single Leg / Round Trip VS Multi-City Builder */}
           {tripType !== "multi-city" ? (
             <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr_auto_auto_auto] gap-3 items-end">
-              {/* Origin - No autofill */}
-              <div className="relative">
+              {/* Origin - Searchable Autocomplete */}
+              <div className="relative" ref={originBoxRef}>
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-stone-500 mb-1">
                   Where from?
                 </label>
                 <div className="relative flex items-center">
                   <MapPin className="absolute left-3 w-4 h-4 text-stone-400 pointer-events-none" />
                   <input
-                    list="airports-origin"
                     value={origin}
-                    onChange={(e) => setOrigin(e.target.value.toUpperCase())}
-                    placeholder="Enter city or airport (e.g. DEL, SFO)"
+                    onFocus={() => setShowOriginSuggestions(true)}
+                    onChange={(e) => {
+                      setOrigin(e.target.value.toUpperCase());
+                      setShowOriginSuggestions(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        setShowOriginSuggestions(false);
+                        executeSearch();
+                      }
+                    }}
+                    placeholder="City or airport (e.g. DEL, SFO)"
                     className="w-full rounded-2xl border border-stone-200 bg-stone-50/50 pl-9 pr-3 py-2.5 text-sm font-semibold text-stone-900 uppercase focus:bg-white focus:border-stone-900 focus:outline-none"
                   />
-                  <datalist id="airports-origin">
-                    {airports.map((a) => (
-                      <option key={`orig-${a.code}`} value={a.code}>
-                        {a.city} ({a.name})
-                      </option>
-                    ))}
-                  </datalist>
                 </div>
+                {showOriginSuggestions && airports.length > 0 && (
+                  <div className="absolute left-0 right-0 mt-1.5 max-h-60 overflow-y-auto rounded-2xl border border-stone-200 bg-white py-1.5 shadow-xl z-40">
+                    {airports
+                      .filter((a) => {
+                        const q = origin.trim().toLowerCase();
+                        if (!q) return true;
+                        return (
+                          a.code.toLowerCase().includes(q) ||
+                          a.city.toLowerCase().includes(q) ||
+                          a.name.toLowerCase().includes(q) ||
+                          a.country.toLowerCase().includes(q)
+                        );
+                      })
+                      .slice(0, 12)
+                      .map((a) => (
+                        <button
+                          key={`orig-opt-${a.code}`}
+                          type="button"
+                          onMouseDown={() => {
+                            setOrigin(a.code);
+                            setShowOriginSuggestions(false);
+                          }}
+                          className="w-full px-3.5 py-2 text-left hover:bg-stone-50 flex items-center justify-between gap-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-stone-900 truncate">
+                              {a.city} <span className="font-normal text-stone-500">· {a.name}</span>
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-lg bg-stone-100 px-2 py-0.5 text-[11px] font-black text-stone-800">
+                            {a.code}
+                          </span>
+                        </button>
+                      ))}
+                  </div>
+                )}
               </div>
 
               {/* Swap Button */}
@@ -1135,28 +1314,66 @@ export default function FlightsPage() {
                 </button>
               </div>
 
-              {/* Destination - No autofill */}
-              <div className="relative">
+              {/* Destination - Searchable Autocomplete */}
+              <div className="relative" ref={destBoxRef}>
                 <label className="block text-[11px] font-semibold uppercase tracking-wider text-stone-500 mb-1">
                   Where to?
                 </label>
                 <div className="relative flex items-center">
                   <MapPin className="absolute left-3 w-4 h-4 text-stone-400 pointer-events-none" />
                   <input
-                    list="airports-dest"
                     value={destination}
-                    onChange={(e) => setDestination(e.target.value.toUpperCase())}
-                    placeholder="Enter city or airport (e.g. BOM, JFK)"
+                    onFocus={() => setShowDestSuggestions(true)}
+                    onChange={(e) => {
+                      setDestination(e.target.value.toUpperCase());
+                      setShowDestSuggestions(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        setShowDestSuggestions(false);
+                        executeSearch();
+                      }
+                    }}
+                    placeholder="City or airport (e.g. BOM, JFK)"
                     className="w-full rounded-2xl border border-stone-200 bg-stone-50/50 pl-9 pr-3 py-2.5 text-sm font-semibold text-stone-900 uppercase focus:bg-white focus:border-stone-900 focus:outline-none"
                   />
-                  <datalist id="airports-dest">
-                    {airports.map((a) => (
-                      <option key={`dest-${a.code}`} value={a.code}>
-                        {a.city} ({a.name})
-                      </option>
-                    ))}
-                  </datalist>
                 </div>
+                {showDestSuggestions && airports.length > 0 && (
+                  <div className="absolute left-0 right-0 mt-1.5 max-h-60 overflow-y-auto rounded-2xl border border-stone-200 bg-white py-1.5 shadow-xl z-40">
+                    {airports
+                      .filter((a) => {
+                        const q = destination.trim().toLowerCase();
+                        if (!q) return true;
+                        return (
+                          a.code.toLowerCase().includes(q) ||
+                          a.city.toLowerCase().includes(q) ||
+                          a.name.toLowerCase().includes(q) ||
+                          a.country.toLowerCase().includes(q)
+                        );
+                      })
+                      .slice(0, 12)
+                      .map((a) => (
+                        <button
+                          key={`dest-opt-${a.code}`}
+                          type="button"
+                          onMouseDown={() => {
+                            setDestination(a.code);
+                            setShowDestSuggestions(false);
+                          }}
+                          className="w-full px-3.5 py-2 text-left hover:bg-stone-50 flex items-center justify-between gap-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-stone-900 truncate">
+                              {a.city} <span className="font-normal text-stone-500">· {a.name}</span>
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-lg bg-stone-100 px-2 py-0.5 text-[11px] font-black text-stone-800">
+                            {a.code}
+                          </span>
+                        </button>
+                      ))}
+                  </div>
+                )}
               </div>
 
               {/* Departure Date */}
@@ -1345,13 +1562,24 @@ export default function FlightsPage() {
             {/* Header / Summary Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
               <div>
-                <h2 className="text-xl font-bold text-stone-900">
-                  {loading
-                    ? (loadingStatus || "Searching for flights...")
-                    : hasSearched
-                    ? `${filteredFlights.length} Flights Available`
-                    : "Find Flights Worldwide"}
-                </h2>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-bold text-stone-900">
+                    {loading
+                      ? (loadingStatus || "Searching for flights...")
+                      : hasSearched
+                      ? `${Math.min(visibleFlightCount, filteredFlights.length)} of ${filteredFlights.length} Flights Available`
+                      : "Find Flights Worldwide"}
+                  </h2>
+                  {loading && (
+                    <button
+                      type="button"
+                      onClick={() => abortControllerRef.current?.abort()}
+                      className="rounded-full border border-stone-300 bg-white px-3 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
                 <p className="text-xs text-stone-500 mt-0.5">
                   {hasSearched
                     ? tripType === "multi-city"
@@ -1652,6 +1880,22 @@ export default function FlightsPage() {
                 })()}
               </div>
             )}
+
+              {/* Show More Pagination */}
+              {hasSearched && filteredFlights.length > visibleFlightCount && (
+                <div className="mt-8 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setVisibleFlightCount((prev) => prev + PAGE_SIZE)
+                    }
+                    className="inline-flex items-center gap-2 rounded-xl border border-stone-200 bg-white px-6 py-3 text-sm font-semibold text-stone-900 hover:bg-stone-50 hover:border-stone-400 active:scale-98 transition-all shadow-xs"
+                  >
+                    <span>Show {PAGE_SIZE} more</span>
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
           </main>
 
           {/* Right Filters Sidebar */}

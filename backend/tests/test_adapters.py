@@ -114,3 +114,59 @@ def test_hotel_record_normalises_amenities() -> None:
     assert record.id == "hotel-kanra"
     assert record.amenities == ["Free wifi", "Bar", "Spa"]
     assert record.photos == ["https://example.com/1.jpg"]
+
+
+def test_google_flights_overnight_and_airline_code() -> None:
+    from scrapers.adapters.google_flights_adapter import _to_record
+
+    # Overnight flight (6:30 PM -> 5:01 AM next day)
+    overnight = _to_record({
+        "airline": "Frontier",
+        "origin": "SFO",
+        "destination": "ORD",
+        "flight_date": "2026-12-11",
+        "departure_time": "6:30 PM",
+        "arrival_time": "5:01 AM",
+        "duration_minutes": 511,
+        "stops": 1,
+        "price": 18886.0,
+        "currency": "INR",
+    })
+    assert overnight is not None
+    assert overnight.airline_code == "F9"
+    assert overnight.departure_time == "2026-12-11T18:30:00"
+    assert overnight.arrival_time == "2026-12-12T05:01:00"
+
+    # Multi-day >24h flight (8:26 PM -> 12:54 AM +2 days, 26h 28m = 1588m)
+    multiday = _to_record({
+        "airline": "American, Operated by SkyWest",
+        "origin": "SFO",
+        "destination": "ORD",
+        "flight_date": "2026-12-11",
+        "departure_time": "8:26 PM",
+        "arrival_time": "12:54 AM",
+        "duration_minutes": 1588,
+        "stops": 1,
+        "price": 25313.0,
+        "currency": "INR",
+    })
+    assert multiday is not None
+    assert multiday.airline_code == "AA"
+    assert multiday.arrival_time == "2026-12-13T00:54:00"
+
+    # Explicit ISO arrival time must be preserved
+    explicit = _to_record({
+        "airline": "JetBlue",
+        "origin": "DEL",
+        "destination": "SFO",
+        "flight_date": "2026-12-11",
+        "departure_time": "3:00 AM",
+        "arrival_time": "2026-12-11T05:30:00",
+        "duration_minutes": 960,
+        "stops": 0,
+        "price": 1000.0,
+        "currency": "USD",
+    })
+    assert explicit is not None
+    assert explicit.airline_code == "B6"
+    assert explicit.arrival_time == "2026-12-11T05:30:00"

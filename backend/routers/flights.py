@@ -443,7 +443,7 @@ async def search_flights_endpoint(
             currency=payload.currency,
             trip_type=payload.trip_type,
             legs=legs_dicts,
-            max_results=payload.max_results or 60,
+            max_results=None,  # No limit — return all available flights
         )
     )
 

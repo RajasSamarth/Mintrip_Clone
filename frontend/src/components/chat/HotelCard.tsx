@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { Star, MapPin, ExternalLink, Bed } from "lucide-react";
+import { Star, MapPin, ExternalLink, Bed, Plus } from "lucide-react";
+import { AddToTripModal } from "@/components/common/AddToTripModal";
 
 interface HotelCardProps {
   card: {
@@ -26,6 +27,7 @@ interface HotelCardProps {
 }
 
 export function HotelCard({ card }: HotelCardProps) {
+  const [addToTripOpen, setAddToTripOpen] = useState(false);
   const name = card.name || "Boutique Hotel";
   const stars = card.stars || 4;
   const rating = card.rating || 4.6;
@@ -97,21 +99,38 @@ export function HotelCard({ card }: HotelCardProps) {
           )}
         </div>
 
-        <div className="pt-2 border-t border-line/50 flex items-center justify-between mt-1">
+        <div className="pt-2 border-t border-line/50 flex items-center justify-between gap-2 mt-1">
           <div>
             <span className="text-xs font-bold text-ink">{priceDisplay}</span>
           </div>
 
-          <a
-            href={googleHotelsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-olive transition-colors"
-          >
-            Select Stay <ExternalLink size={11} />
-          </a>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setAddToTripOpen(true)}
+              className="inline-flex items-center gap-1 rounded-full border border-line bg-white px-2.5 py-1.5 text-xs font-semibold text-ink hover:bg-cream transition-colors"
+              title="Add stay to trip"
+            >
+              <Plus size={11} className="text-olive" /> Trip
+            </button>
+            <a
+              href={googleHotelsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-olive transition-colors"
+            >
+              Stay <ExternalLink size={11} />
+            </a>
+          </div>
         </div>
       </div>
+
+      <AddToTripModal
+        isOpen={addToTripOpen}
+        onClose={() => setAddToTripOpen(false)}
+        itemType="hotel"
+        itemData={card}
+      />
     </article>
   );
 }

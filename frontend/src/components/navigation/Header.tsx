@@ -11,8 +11,8 @@ const NAV = [
   { href: "/flights", label: "Flights" },
   { href: "/eats", label: "Eats" },
   { href: "/experiences", label: "Experiences" },
-  { href: "/inspiration?search=events", label: "Events" },
   { href: "/trips", label: "Trips" },
+  { href: "/chat", label: "AI Chat" },
 ];
 
 export function Header({ sticky }: { sticky?: boolean } = { sticky: true }) {
@@ -28,6 +28,11 @@ export function Header({ sticky }: { sticky?: boolean } = { sticky: true }) {
   }, []);
 
   useEffect(() => setOpen(false), [pathname]);
+
+  // The landing page renders its own full-bleed transparent-to-solid hero header.
+  if (pathname === "/") {
+    return null;
+  }
 
   return (
     <header
@@ -62,24 +67,20 @@ export function Header({ sticky }: { sticky?: boolean } = { sticky: true }) {
 
         {/* Right CTA */}
         <div className="hidden items-center gap-3 md:flex">
-          <a href="https://apps.apple.com/app/mindtrip-ai-travel-companion/id6503107567" target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-ink/80 hover:text-ink transition-colors">
-            Get app
-          </a>
-          <a href="#" className="text-sm font-semibold text-ink/80 hover:text-ink transition-colors">
-            Log in
-          </a>
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-2 rounded-full bg-[#D97706] px-5 py-2.5 text-sm font-semibold text-[#000000] shadow-sm transition-all hover:bg-[#D97706]/90 hover:shadow-md active:scale-[0.98]">
-              <Link href="/chat">
-                <Sparkle />
-                Set up assistant
-              </Link>
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-5 py-2.5 text-sm font-semibold text-ink backdrop-blur hover:bg-white/20 transition-all">
-              <Link href="/chat">
-                Get started
-              </Link>
-            </span>
+          <Link
+            href="/inspiration"
+            className="text-sm font-semibold text-ink/80 hover:text-ink transition-colors"
+          >
+            Inspiration
+          </Link>
+          <div className="flex items-center gap-2.5">
+            <Link
+              href="/chat"
+              className="inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-ink-soft hover:shadow-md active:scale-[0.98]"
+            >
+              <Sparkle />
+              <span>AI Concierge</span>
+            </Link>
           </div>
         </div>
 
@@ -99,39 +100,36 @@ export function Header({ sticky }: { sticky?: boolean } = { sticky: true }) {
         <div className="border-t border-line bg-paper/98 px-5 pb-6 pt-3 backdrop-blur-xl shadow-lg md:hidden">
           <nav className="flex flex-col gap-1" aria-label="Mobile Navigation">
             {NAV.map((item) => {
-              const isActive = pathname === item.href;
+              const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
               return (
-                <span
+                <Link
                   key={item.href}
+                  href={item.href}
                   className={`rounded-xl px-4 py-3 text-base font-semibold transition-colors ${
                     isActive
                       ? "bg-ink text-white"
                       : "text-ink/85 hover:bg-ink/5 hover:text-ink"
                   }`}
                 >
-                  <Link href={item.href}>{item.label}</Link>
-                </span>
+                  {item.label}
+                </Link>
               );
             })}
           </nav>
-          <div className="mt-4 flex flex-col gap-3">
-            <a href="https://apps.apple.com/app/mindtrip-ai-travel-companion/id6503107567" target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-ink/80 hover:text-ink transition-colors">
-              Get app
-            </a>
-            <a href="#" className="text-sm font-semibold text-ink/80 hover:text-ink transition-colors">
-              Log in
-            </a>
-            <span className="mt-2 flex items-center justify-center gap-2 rounded-full bg-[#D97706] px-5 py-3 text-sm font-semibold text-[#000000] shadow-sm hover:bg-[#D97706]/90 transition-all">
-              <Link href="/chat">
-                <Sparkle />
-                Set up assistant
-              </Link>
-            </span>
-            <span className="flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/10 px-5 py-3 text-sm font-semibold text-ink backdrop-blur hover:bg-white/20 transition-all">
-              <Link href="/chat">
-                Get started
-              </Link>
-            </span>
+          <div className="mt-4 flex flex-col gap-2.5">
+            <Link
+              href="/inspiration"
+              className="rounded-xl border border-line px-4 py-2.5 text-center text-sm font-semibold text-ink/85 hover:bg-ink/5 transition-colors"
+            >
+              Inspiration
+            </Link>
+            <Link
+              href="/chat"
+              className="flex items-center justify-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-ink-soft transition-all"
+            >
+              <Sparkle />
+              <span>AI Concierge</span>
+            </Link>
           </div>
         </div>
       )}

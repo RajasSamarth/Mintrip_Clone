@@ -23,7 +23,7 @@ import {
   Plus
 } from "lucide-react";
 import { api } from "@/lib/api";
-import NextImage from "next/image";
+import { CURRENCIES as SHARED_CURRENCIES, convertAmount } from "@/lib/currencies";
 import { HotelDetailModal } from "@/components/stays/HotelDetailModal";
 import { AddToTripModal } from "@/components/common/AddToTripModal";
 
@@ -117,13 +117,7 @@ function areSameHotel(h1: Hotel, h2: Hotel): boolean {
   return false;
 }
 
-const CURRENCIES: Record<string, { symbol: string; label: string; rateFromINR: number }> = {
-  INR: { symbol: "₹", label: "Indian Rupee (INR)", rateFromINR: 1.0 },
-  USD: { symbol: "$", label: "US Dollar (USD)", rateFromINR: 1 / 85.0 },
-  EUR: { symbol: "€", label: "Euro (EUR)", rateFromINR: 1 / 92.0 },
-  GBP: { symbol: "£", label: "British Pound (GBP)", rateFromINR: 1 / 108.0 },
-  JPY: { symbol: "¥", label: "Japanese Yen (JPY)", rateFromINR: 1.78 },
-};
+const CURRENCIES = SHARED_CURRENCIES;
 
 const POPULAR_DESTINATIONS = [
   { city: "Kyoto", country: "Japan", label: "Kyoto, Japan" },
@@ -173,11 +167,12 @@ export default function StaysPage() {
   const [selectedHotel, setSelectedHotel] = useState<Hotel | null>(null);
   const [addToTripHotel, setAddToTripHotel] = useState<Hotel | null>(null);
 
-  // Filters
+  // Filters & sorting
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [starsFilter, setStarsFilter] = useState("");
   const [amenitiesFilter, setAmenitiesFilter] = useState<string[]>([]);
+  const [sortBy, setSortBy] = useState<"recommended" | "price_asc" | "price_desc" | "rating">("recommended");
 
   // State
   const [loading, setLoading] = useState(false);
@@ -187,18 +182,6 @@ export default function StaysPage() {
 
   const currencyMenuRef = useRef<HTMLDivElement>(null);
   const guestsMenuRef = useRef<HTMLDivElement>(null);
-
-  // Initialize dates
-  useEffect(() => {
-    const today = new Date();
-    const d1 = new Date(today);
-    d1.setDate(today.getDate() + 14);
-    const d2 = new Date(today);
-    d2.setDate(today.getDate() + 17);
-
-    setCheckIn(d1.toISOString().split("T")[0]);
-    setCheckOut(d2.toISOString().split("T")[0]);
-  }, []);
 
   // Close popovers on click outside
   useEffect(() => {
@@ -214,30 +197,85 @@ export default function StaysPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Initial load
+  // Initialize dates, read URL params, and perform initial fetch
   useEffect(() => {
+    const today = new Date();
+    const d1 = new Date(today);
+    d1.setDate(today.getDate() + 14);
+    const d2 = new Date(today);
+    d2.setDate(today.getDate() + 17);
+
+    let initialDest = "Kyoto";
+    let initialCheckIn = d1.toISOString().split("T")[0];
+    let initialCheckOut = d2.toISOString().split("T")[0];
+    let initialAdults = 2;
+    let initialRooms = 1;
+    let shouldAutoSearch = false;
+
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlDest = params.get("destination") || params.get("city");
+      const urlIn = params.get("check_in");
+      const urlOut = params.get("check_out");
+      const urlAdults = Number(params.get("adults") || "0");
+      const urlRooms = Number(params.get("rooms") || "0");
+      shouldAutoSearch = params.get("auto_search") === "1";
+
+      if (urlDest && urlDest.trim()) {
+        initialDest = urlDest.trim();
+        setDestination(initialDest);
+      }
+      if (urlIn) initialCheckIn = urlIn;
+      if (urlOut) initialCheckOut = urlOut;
+      if (urlAdults >= 1 && urlAdults <= 10) {
+        initialAdults = urlAdults;
+        setAdults(urlAdults);
+      }
+      if (urlRooms >= 1 && urlRooms <= 6) {
+        initialRooms = urlRooms;
+        setRooms(urlRooms);
+      }
+    }
+
+    setCheckIn(initialCheckIn);
+    setCheckOut(initialCheckOut);
+
     async function initialFetch() {
       setLoading(true);
       try {
-        const res = await api(`/hotels?destination=Kyoto&limit=50&auto_scrape=false`);
+        const res = await api(`/hotels?destination=${encodeURIComponent(initialDest)}&limit=50&auto_scrape=false`);
         const json = await res.json();
-        if (json.hotels && json.hotels.length > 0) {
+        if (json.hotels && json.hotels.length > 0 && !shouldAutoSearch) {
           setHotels(json.hotels);
         } else {
-          executeSearch("Kyoto");
+          await executeSearch(initialDest, {
+            checkIn: initialCheckIn,
+            checkOut: initialCheckOut,
+            adults: initialAdults,
+            rooms: initialRooms,
+          });
         }
       } catch (err) {
         console.warn("Initial hotels load failed, triggering search:", err);
-        executeSearch("Kyoto");
+        await executeSearch(initialDest, {
+          checkIn: initialCheckIn,
+          checkOut: initialCheckOut,
+          adults: initialAdults,
+          rooms: initialRooms,
+        });
       } finally {
         setLoading(false);
       }
     }
     initialFetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Execute Search Function
-  async function executeSearch(targetDest?: string) {
+  async function executeSearch(
+    targetDest?: string,
+    overrides?: { checkIn?: string; checkOut?: string; adults?: number; rooms?: number }
+  ) {
     const dest = (targetDest || destination).trim();
     if (!dest) {
       setErrorMsg("Please enter a destination city (e.g. Kyoto, Delhi, Rome).");
@@ -252,10 +290,10 @@ export default function StaysPage() {
     try {
       const payload = {
         destination: dest,
-        check_in: checkIn || undefined,
-        check_out: checkOut || undefined,
-        adults,
-        rooms,
+        check_in: (overrides?.checkIn ?? checkIn) || undefined,
+        check_out: (overrides?.checkOut ?? checkOut) || undefined,
+        adults: overrides?.adults ?? adults,
+        rooms: overrides?.rooms ?? rooms,
         currency: selectedCurrency,
         live: true,
       };
@@ -302,24 +340,15 @@ export default function StaysPage() {
 
     const curr = CURRENCIES[selectedCurrency] || CURRENCIES.INR;
     const hotelCurr = (hotel.currency || "INR").toUpperCase();
-    let priceInCurrent = hotel.price_per_night;
-
-    if (hotelCurr === "INR" && selectedCurrency !== "INR") {
-      priceInCurrent = hotel.price_per_night * curr.rateFromINR;
-    } else if (hotelCurr === "USD" && selectedCurrency === "INR") {
-      priceInCurrent = hotel.price_per_night * 85.0;
-    } else if (hotelCurr === "USD" && selectedCurrency !== "USD") {
-      const inr = hotel.price_per_night * 85.0;
-      priceInCurrent = inr * curr.rateFromINR;
-    }
+    const priceInCurrent = convertAmount(hotel.price_per_night, hotelCurr, selectedCurrency);
 
     return {
-      formatted: `${curr.symbol} ${Math.round(priceInCurrent).toLocaleString("en-IN")}`,
+      formatted: `${curr.symbol} ${Math.round(priceInCurrent).toLocaleString(selectedCurrency === "INR" ? "en-IN" : "en-US")}`,
       isUnavailable: false,
     };
   }
 
-  // Filtered hotels with smart deduplication
+  // Filtered & sorted hotels with smart deduplication
   const filteredHotels = useMemo(() => {
     // Smart deduplication: filter out duplicates while preserving distinct branches
     const uniqueHotels: Hotel[] = [];
@@ -346,16 +375,20 @@ export default function StaysPage() {
       }
     }
 
-    return uniqueHotels.filter((h) => {
+    const filtered = uniqueHotels.filter((h) => {
       // Star filter
       if (starsFilter && h.stars < parseInt(starsFilter, 10)) {
         return false;
       }
-      // Price filters
-      if (minPrice && h.price_per_night != null && h.price_per_night < parseFloat(minPrice)) {
+      // Price filters (evaluated in active selectedCurrency)
+      const numericPrice =
+        h.price_per_night != null && !h.price_unavailable
+          ? convertAmount(h.price_per_night, (h.currency || "INR").toUpperCase(), selectedCurrency)
+          : null;
+      if (minPrice && numericPrice != null && numericPrice < parseFloat(minPrice)) {
         return false;
       }
-      if (maxPrice && h.price_per_night != null && h.price_per_night > parseFloat(maxPrice)) {
+      if (maxPrice && numericPrice != null && numericPrice > parseFloat(maxPrice)) {
         return false;
       }
       // Amenities filter
@@ -368,7 +401,29 @@ export default function StaysPage() {
       }
       return true;
     });
-  }, [hotels, starsFilter, minPrice, maxPrice, amenitiesFilter]);
+
+    if (sortBy === "recommended") return filtered;
+
+    return [...filtered].sort((a, b) => {
+      const priceA =
+        a.price_per_night != null && !a.price_unavailable
+          ? convertAmount(a.price_per_night, (a.currency || "INR").toUpperCase(), selectedCurrency)
+          : Number.POSITIVE_INFINITY;
+      const priceB =
+        b.price_per_night != null && !b.price_unavailable
+          ? convertAmount(b.price_per_night, (b.currency || "INR").toUpperCase(), selectedCurrency)
+          : Number.POSITIVE_INFINITY;
+
+      if (sortBy === "price_asc") return priceA - priceB;
+      if (sortBy === "price_desc") {
+        const descA = Number.isFinite(priceA) ? priceA : -1;
+        const descB = Number.isFinite(priceB) ? priceB : -1;
+        return descB - descA;
+      }
+      if (sortBy === "rating") return (b.rating ?? 0) - (a.rating ?? 0);
+      return 0;
+    });
+  }, [hotels, starsFilter, minPrice, maxPrice, amenitiesFilter, sortBy, selectedCurrency]);
 
   const toggleAmenity = (amenity: string) => {
     if (amenitiesFilter.includes(amenity)) {
@@ -417,7 +472,7 @@ export default function StaysPage() {
               </button>
 
               {showCurrencyMenu && (
-                <div className="absolute right-0 mt-2 w-48 rounded-2xl border border-stone-200 bg-white py-1.5 shadow-xl z-50">
+                <div className="absolute right-0 mt-2 w-56 max-h-72 overflow-y-auto rounded-2xl border border-stone-200 bg-white py-1.5 shadow-xl z-50">
                   {Object.entries(CURRENCIES).map(([code, cur]) => (
                     <button
                       key={code}
@@ -704,15 +759,54 @@ export default function StaysPage() {
 
           {/* Results Grid */}
           <main>
-            {/* Header / Summary */}
-            <div className="flex items-center justify-between mb-4">
+            {/* Header / Summary & Sort */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
                 <h2 className="text-base font-bold text-stone-900">
                   {filteredHotels.length} Accommodation{filteredHotels.length !== 1 ? "s" : ""} Available
                 </h2>
-                <p className="text-xs text-stone-500">in {destination} • Sorted by relevance</p>
+                <p className="text-xs text-stone-500">in {destination}</p>
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-stone-100 p-1 rounded-2xl self-start sm:self-auto">
+                {[
+                  { id: "recommended", label: "Recommended" },
+                  { id: "price_asc", label: "Price: Low" },
+                  { id: "price_desc", label: "Price: High" },
+                  { id: "rating", label: "Top Rated" },
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setSortBy(opt.id as any)}
+                    className={`px-3 py-1 rounded-xl text-xs font-semibold transition-colors ${
+                      sortBy === opt.id
+                        ? "bg-white text-stone-900 shadow-xs"
+                        : "text-stone-600 hover:text-stone-900"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
               </div>
             </div>
+
+            {/* Loading Skeleton Grid */}
+            {loading && (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 mb-6">
+                {[1, 2, 3, 4, 5, 6].map((n) => (
+                  <div
+                    key={n}
+                    className="rounded-3xl border border-stone-200 bg-white overflow-hidden p-4 space-y-3 animate-pulse"
+                  >
+                    <div className="h-44 w-full rounded-2xl bg-stone-200" />
+                    <div className="h-4 w-3/4 rounded bg-stone-200" />
+                    <div className="h-3 w-1/2 rounded bg-stone-100" />
+                    <div className="h-8 w-full rounded-xl bg-stone-100" />
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Empty State */}
             {!loading && filteredHotels.length === 0 && (
